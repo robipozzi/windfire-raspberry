@@ -1,0 +1,51 @@
+--- # Ansible Playbook to configure Raspberry Pi in a consistent and repeatable way
+- hosts: raspberry
+  user: pi
+  become: yes
+  vars:
+    src_dir: /Users/robertopozzi/dev/devops/Ansible/raspberry
+    home_dir: /home/pi/
+    owner: pi
+    group: pi
+    mode: u=rwx
+  vars_files:
+    - "{{ src_dir }}/conf/nginx.yml"
+  tasks:
+    #########################
+    ##### NGINX Section #####
+    #########################
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+    - name: Start Nginx server
+      service:
+        name: nginx
+        state: started
+    - name: Create webservers utility directory
+      file:
+        path: "{{ home_dir }}/webservers"
+        state: directory
+        owner: "{{ owner }}"
+        group: "{{ group }}"
+    - name: Copy script to stop Nginx
+      template:
+        src: "{{ src_dir }}/assets/nginx-stop.j2"
+        dest: "{{ home_dir }}/webservers/nginx-stop.sh"
+        owner: "{{ owner }}"
+        group: "{{ group }}"
+        mode: "{{ mode }}"
+    - name: Copy script to start Nginx
+      template:
+        src: "{{ src_dir }}/assets/nginx-start.j2"
+        dest: "{{ home_dir }}/webservers/nginx-start.sh"
+        owner: "{{ owner }}"
+        group: "{{ group }}"
+        mode: "{{ mode }}"
+    - name: Copy script to reload Nginx configuration
+      template:
+        src: "{{ src_dir }}/assets/nginx-reload.j2"
+        dest: "{{ home_dir }}/webservers/nginx-reload.sh"
+        owner: "{{ owner }}"
+        group: "{{ group }}"
+        mode: "{{ mode }}"

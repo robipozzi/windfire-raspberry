@@ -1,0 +1,1 @@
+ansible raspberry -m ping -u pi

@@ -1,0 +1,51 @@
+--- # Ansible Playbook to configure Raspberry Pi in a consistent and repeatable way
+- hosts: raspberry
+  user: pi
+  become: yes
+  vars:
+    src_dir: /Users/robertopozzi/dev/windfire-raspberry
+    home_dir: /home/pi/
+    owner: pi
+    group: pi
+    mode: u=rwx
+  vars_files:
+    - "{{ src_dir }}/conf/nginx.yml"
+    - "{{ src_dir }}/conf/apache2.yml"
+  tasks:
+    ###########################
+    ##### Openssl Section #####
+    ###########################
+    - name: Install Openssl 
+      apt: 
+        name: openssl 
+        state: present
+    ################################
+    ##### Apache2 HTTP Section #####
+    ################################
+    - name: Install Apache2 
+      apt: 
+        name: apache2 
+        state: present
+    - name: Start and enable Apache2
+      service: 
+        name: apache2 
+        state: started
+        enabled: yes
+    - name: Create webserver script directory
+      file:
+        path: "{{ home_dir }}/webservers"
+        state: directory
+    - name: Copy script to stop Apache2
+      template:
+        src: "{{ src_dir }}/assets/apache2-stop.j2"
+        dest: "{{ home_dir }}/webservers/apache2-stop.sh"
+        owner: "{{ owner }}"
+        group: "{{ group }}"
+        mode: "{{ mode }}"
+    - name: Copy script to start Apache2
+      template:
+        src: "{{ src_dir }}/assets/apache2-start.j2"
+        dest: "{{ home_dir }}/webservers/apache2-start.sh"
+        owner: "{{ owner }}"
+        group: "{{ group }}"
+        mode: "{{ mode }}"
