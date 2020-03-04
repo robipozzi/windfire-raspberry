@@ -1,4 +1,4 @@
---- # Ansible Playbook to configure Raspberry Pi in a consistent and repeatable way
+--- # Ansible Playbook to configure a set of Raspberry PIs in a consistent and repeatable way
 - hosts: raspberry
   user: pi
   become: yes
