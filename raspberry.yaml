@@ -9,7 +9,6 @@
     group: pi
     mode: u=rwx
   vars_files:
-    - "{{ src_dir }}/conf/nginx.yml"
     - "{{ src_dir }}/conf/apache2.yml"
   tasks:
     ###########################
