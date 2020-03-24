@@ -1,11 +1,9 @@
 --- # Ansible Playbook to configure a set of Raspberry PIs in a consistent and repeatable way
 - hosts: raspberry
-  user: pi
+  user: "{{ user }}"
   become: yes
   vars:
-    src_dir: /Users/robertopozzi/dev/windfire-raspberry
-    owner: pi
-    group: pi
+    src_dir: "{{ playbook_dir }}"
     mode: u=rwx
   vars_files:
     - "{{ src_dir }}/conf/raspberry-config.yml"
@@ -32,26 +30,26 @@
         enabled: yes
     - name: Create webserver script directory
       file:
-        path: "{{ home_dir }}/webservers"
+        path: "{{ home_dir }}/utilities/webservers"
         state: directory
     - name: Copy script to start Apache2
       template:
         src: "{{ src_dir }}/assets/apache2-start.j2"
-        dest: "{{ home_dir }}/webservers/apache2-start.sh"
-        owner: "{{ owner }}"
+        dest: "{{ home_dir }}/utilities/webservers/apache2-start.sh"
+        owner: "{{ user }}"
         group: "{{ group }}"
         mode: "{{ mode }}"
     - name: Copy script to stop Apache2
       template:
         src: "{{ src_dir }}/assets/apache2-stop.j2"
-        dest: "{{ home_dir }}/webservers/apache2-stop.sh"
-        owner: "{{ owner }}"
+        dest: "{{ home_dir }}/utilities/webservers/apache2-stop.sh"
+        owner: "{{ user }}"
         group: "{{ group }}"
         mode: "{{ mode }}"
     - name: Copy script to reload Apache2
       template:
         src: "{{ src_dir }}/assets/apache2-reload.j2"
-        dest: "{{ home_dir }}/webservers/apache2-reload.sh"
-        owner: "{{ owner }}"
+        dest: "{{ home_dir }}/utilities/webservers/apache2-reload.sh"
+        owner: "{{ user }}"
         group: "{{ group }}"
         mode: "{{ mode }}"
