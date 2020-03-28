@@ -1,0 +1,35 @@
+--- # Ansible Playbook to configure a set of Raspberry PIs in a consistent and repeatable way
+- hosts: frontend
+  remote_user: "{{ user }}"
+  vars:
+    src_dir: "{{ playbook_dir }}"
+    mode: u=rwx
+  vars_files:
+    - "{{ src_dir }}/conf/raspberry-config.yml"
+    - "{{ src_dir }}/conf/nginx.yml"
+  tasks:
+    ###########################
+    ##### Openssl Section #####
+    ###########################
+    - name: Install Openssl 
+      apt: 
+        name: openssl 
+        state: present
+    #########################
+    ##### NGINX Section #####
+    #########################
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+    - name: Start Nginx server
+      service:
+        name: nginx
+        state: started
+    - name: Copy utility scripts to remote server
+      copy:
+        src: "{{ src_dir }}/scripts/"
+        dest: "{{ remote_home_dir }}/utilities/webservers/"
+        owner: "{{ user }}"
+        group: "{{ group }}"
+        mode: "{{ mode }}"
