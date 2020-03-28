@@ -1,7 +1,6 @@
 --- # Ansible Playbook to configure a set of Raspberry PIs in a consistent and repeatable way
 - hosts: raspberry
-  user: "{{ user }}"
-  become: yes
+  remote_user: "{{ user }}"
   vars:
     src_dir: "{{ playbook_dir }}"
     mode: u=rwx
@@ -28,28 +27,10 @@
         name: apache2 
         state: started
         enabled: yes
-    - name: Create webserver script directory
-      file:
-        path: "{{ home_dir }}/utilities/webservers"
-        state: directory
-    - name: Copy script to start Apache2
-      template:
-        src: "{{ src_dir }}/assets/apache2-start.j2"
-        dest: "{{ home_dir }}/utilities/webservers/apache2-start.sh"
-        owner: "{{ user }}"
-        group: "{{ group }}"
-        mode: "{{ mode }}"
-    - name: Copy script to stop Apache2
-      template:
-        src: "{{ src_dir }}/assets/apache2-stop.j2"
-        dest: "{{ home_dir }}/utilities/webservers/apache2-stop.sh"
-        owner: "{{ user }}"
-        group: "{{ group }}"
-        mode: "{{ mode }}"
-    - name: Copy script to reload Apache2
-      template:
-        src: "{{ src_dir }}/assets/apache2-reload.j2"
-        dest: "{{ home_dir }}/utilities/webservers/apache2-reload.sh"
+    - name: Copy utility scripts to remote server
+      copy:
+        src: "{{ src_dir }}/scripts/"
+        dest: "{{ remote_home_dir }}/utilities/webservers/"
         owner: "{{ user }}"
         group: "{{ group }}"
         mode: "{{ mode }}"
