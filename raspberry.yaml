@@ -1,6 +1,7 @@
 --- # Ansible Playbook to configure a set of Raspberry PIs in a consistent and repeatable way
 - hosts: raspberry
   remote_user: "{{ user }}"
+  become: yes
   vars:
     src_dir: "{{ playbook_dir }}"
     mode: u=rwx
