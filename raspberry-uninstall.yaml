@@ -1,0 +1,24 @@
+--- # Ansible Playbook to configure a set of Raspberry PIs in a consistent and repeatable way
+- hosts: raspberry
+  remote_user: "{{ user }}"
+  become: yes
+  vars:
+    src_dir: "{{ playbook_dir }}"
+    mode: u=rwx
+  vars_files:
+    - "{{ src_dir }}/conf/raspberry-config.yml"
+    - "{{ src_dir }}/conf/apache2.yml"
+  tasks:
+    ##########################################
+    ##### Apache2 HTTP Uninstall Section #####
+    ##########################################
+    - name: Uninstall Apache2 
+      apt: 
+        name: apache2 
+        state: absent
+        purge: yes
+        autoremove: yes
+    - name: Clean Apache2 folder {{ apache2_doc_dir }}
+      file:
+        path: "{{ apache2_doc_dir }}/"
+        state: absent
