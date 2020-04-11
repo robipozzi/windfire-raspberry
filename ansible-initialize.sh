@@ -11,7 +11,7 @@ SCRIPT="ansible-initialize.sh"
 sshCopy()
 {
 	echo ${cyn}Copying Ansible SSH key to destination ...${end}
-    ssh-copy-id -i /Users/robertopozzi/.ssh/ansible_rsa pi@$DESTINATION
+    ssh-copy-id -i $HOME/.ssh/ansible_rsa pi@$DESTINATION
     echo ${cyn}Done${end}
 }
 
