@@ -12,12 +12,17 @@ A file, named *ansible.cfg*, is also provided to set basic configurations needed
 ![](images/ansible-config.png)
 where:
 
-* *private_key_file* points to the SSH private key you have previously generated, used by Ansible to connect and launch tasks on the target Raspberry Pi box;
+* *private_key_file* points to the SSH private key you have previously generated, used by Ansible to connect and launch tasks on the target Raspberry Pi;
 * *inventory* defines where Ansible will look for the inventory file, which is used by Ansible to know which servers to connect and manage.
 
 Change the parameters according to your environment.
 
-## Ansible configuration setup
+## aApache2 installation automation task
+A couple of convenient scripts are provided:
+* *install.sh*: it uses *raspberry.yaml* playbook that install 
+
+    * sdsds
+* *uninstall.sh*:  it uses *raspberry-uninstall.yaml* playbook to 
 
 ## References
-I  *https://bit.ly/3b13V9h*
+I wrote a more extensive article on how to use Ansible to automate various installation, configuration and application deployment tasks, you can read it at the link here *https://bit.ly/3b13V9h*.
