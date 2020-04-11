@@ -17,12 +17,15 @@ where:
 
 Change the parameters according to your environment.
 
-## aApache2 installation automation task
+## Apache2 installation automation task
 A couple of convenient scripts are provided:
-* *install.sh*: it uses *raspberry.yaml* playbook that install 
+* *install.sh*: it uses *raspberry.yaml* playbook that does the following tasks: 
 
-    * sdsds
-* *uninstall.sh*:  it uses *raspberry-uninstall.yaml* playbook to 
+    * installs Apache2 to Raspberry Pi;
+    * copies some utility scripts (provided in the *scripts* sub-folder) to Raspberry Pi.
+* *uninstall.sh*: it uses *raspberry-uninstall.yaml* playbook to uninstall Apache2 from Raspberry Pi.
+
+Both playbooks refer to yaml files provided in *conf* sub-folder for common variables setup and usage.
 
 ## References
 I wrote a more extensive article on how to use Ansible to automate various installation, configuration and application deployment tasks, you can read it at the link here *https://bit.ly/3b13V9h*.
