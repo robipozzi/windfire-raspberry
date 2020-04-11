@@ -17,7 +17,7 @@ where:
 
 Change the parameters according to your environment.
 
-## Apache2 installation automation task
+## Apache2 and Nginx installation automation task
 A couple of convenient scripts are provided:
 * *install.sh*: it uses *raspberry.yaml* playbook that does the following tasks: 
 
