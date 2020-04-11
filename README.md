@@ -23,6 +23,10 @@ A couple of convenient scripts are provided:
 
     * installs Apache2 to Raspberry Pi;
     * copies some utility scripts (provided in the *scripts* sub-folder) to Raspberry Pi.
+* *install-nginx.sh*: it uses *raspberry-nginx.yaml* playbook that does the following tasks: 
+
+    * installs Nginx to Raspberry Pi;
+    * copies some utility scripts (provided in the *scripts* sub-folder) to Raspberry Pi.
 * *uninstall.sh*: it uses *raspberry-uninstall.yaml* playbook to uninstall Apache2 from Raspberry Pi.
 
 Both playbooks refer to yaml files provided in *conf* sub-folder for common variables setup and usage.
