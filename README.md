@@ -10,11 +10,12 @@ Ansible uses ssh to connect to the managed infrastructure, so you will first nee
 A file, named *ansible.cfg*, is also provided to set basic configurations needed to run Ansible; if you launch Ansible from the repo root directory, this file will be read and used as the source for configuration settings (unless you have set an ANSIBLE_CONFIG environment variable, which has precedence), the basic configuration you should have is something like this:
 
 ![](images/ansible-config.png)
-
 where:
 
-* *private_key_file* points to the SSH private key you have previously generated, used by Ansible to connect and launch tasks on the target Raspberry Pi box, change it according to your environment;
+* *private_key_file* points to the SSH private key you have previously generated, used by Ansible to connect and launch tasks on the target Raspberry Pi box;
 * *inventory* defines where Ansible will look for the inventory file, which is used by Ansible to know which servers to connect and manage.
+
+Change the parameters according to your environment.
 
 ## Ansible configuration setup
 
