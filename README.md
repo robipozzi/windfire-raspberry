@@ -9,7 +9,7 @@ Ansible uses ssh to connect to the managed infrastructure, so you will first nee
 
 A file, named *ansible.cfg*, is also provided to set basic configurations needed to run Ansible; if you launch Ansible from the repo root directory, this file will be read and used as the source for configuration settings (unless you have set an ANSIBLE_CONFIG environment variable, which has precedence), the basic configuration you should have is something like this:
 
-*ansible-config.png*
+![](images/ansible-config.png)
 
 where:
 
