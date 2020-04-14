@@ -18,7 +18,7 @@ where:
 Change the parameters according to your environment.
 
 ## Apache2 and Nginx installation automation task
-A couple of convenient scripts are provided:
+The following scripts are provided for convenience:
 * *install.sh*: it uses *raspberry.yaml* playbook that does the following tasks: 
 
     * installs Apache2 to Raspberry Pi;
