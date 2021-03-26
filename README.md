@@ -27,5 +27,9 @@ A couple of convenient scripts are provided:
 
 Both playbooks refer to yaml files provided in *conf* sub-folder for common variables setup and usage.
 
+## Docker installation automation task
+https://phoenixnap.com/kb/docker-on-raspberry-pi
+https://www.rs-online.com/designspark/raspberry-pi-4-personal-datacentre-part-1-ansible-docker-and-nextcloud
+
 ## References
 I wrote a more extensive article on how to use Ansible to automate various installation, configuration and application deployment tasks on Raspberry Pi, you can read it at the link here *https://bit.ly/3b13V9h*.
