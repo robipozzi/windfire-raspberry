@@ -13,7 +13,7 @@
     ###################################
     ##### NGINX Uninstall Section #####
     ###################################
-    - name: Stop Nginx Services
+    - name: Stop NGINX Services
       service:
         name: nginx
         state: stopped
