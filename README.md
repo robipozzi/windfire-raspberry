@@ -33,7 +33,7 @@ The **[raspberry.yaml](raspberry.yaml)** playbook is provided to do the followin
     * install Docker
 
 Some convenient scripts are provided:
-* **[install-docker-role.sh](install-docker-role.sh)**, which installs *geerlingguy.docker_arm* role (see Ansible Galaxy https://galaxy.ansible.com/geerlingguy/docker_arm and GitHub Repo https://github.com/geerlingguy/ansible-role-docker_arm for more info ) that installs Docker on Linux, specially tailored for ARM-based computers like the Raspberry Pi.
+* **[install-docker-role.sh](docker/install-docker-role.sh)**, which installs *geerlingguy.docker_arm* role (see Ansible Galaxy https://galaxy.ansible.com/geerlingguy/docker_arm and GitHub Repo https://github.com/geerlingguy/ansible-role-docker_arm for more info ) that installs Docker on Linux, specially tailored for ARM-based computers like the Raspberry Pi.
 * **[install.sh](install.sh)** uses *[raspberry.yaml](raspberry.yaml)* playbook that does the following tasks: 
 * **[uninstall.sh](uninstall.sh)** uses *[raspberry-uninstall.yaml](raspberry-uninstall.yaml)* playbook to uninstall Apache2 from Raspberry Pi.
 
@@ -42,7 +42,7 @@ Both playbooks refer to yaml files provided in *conf* sub-folder for common vari
 ### Docker installation automation task
 To automate Docker installation on Raspberry Pi boxes using Ansible: follow instructions at https://www.rs-online.com/designspark/raspberry-pi-4-personal-datacentre-part-1-ansible-docker-and-nextcloud.
 
-General instructions on how to install Docker on Raspberry Pi boxes are available at https://phoenixnap.com/kb/docker-on-raspberry-pi.
+General instructions on how to install and uninstall Docker on Raspberry Pi boxes are available at https://phoenixnap.com/kb/docker-on-raspberry-pi.
 
 ## References
 I wrote a more extensive article on how to use Ansible to automate various installation, configuration and application deployment tasks on Raspberry Pi, you can read it at the link here *https://bit.ly/3b13V9h*.

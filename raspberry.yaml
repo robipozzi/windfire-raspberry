@@ -5,20 +5,28 @@
   vars:
     src_dir: "{{ playbook_dir }}"
     mode: u=rwx
+    docker_install_compose: false
+    docker_users:
+      - pi
   vars_files:
     - "{{ src_dir }}/conf/raspberry-config.yml"
     - "{{ src_dir }}/conf/apache2.yml"
+  ##########################
+  ##### Docker Section #####
+  ##########################
+  roles:
+    - geerlingguy.docker_arm
   tasks:
-    ###########################
-    ##### Openssl Section #####
-    ###########################
+  ###########################
+  ##### Openssl Section #####
+  ###########################
     - name: Install Openssl 
       apt: 
         name: openssl 
         state: present
-    ################################
-    ##### Apache2 HTTP Section #####
-    ################################
+  ################################
+  ##### Apache2 HTTP Section #####
+  ################################
     - name: Install Apache2 
       apt: 
         name: apache2 

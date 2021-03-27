@@ -8,7 +8,25 @@
   vars_files:
     - "{{ src_dir }}/conf/raspberry-config.yml"
     - "{{ src_dir }}/conf/apache2.yml"
+    - "{{ src_dir }}/conf/nginx.yml"
   tasks:
+    ###################################
+    ##### NGINX Uninstall Section #####
+    ###################################
+    - name: Stop Nginx Services
+      service:
+        name: nginx
+        state: stopped
+    - name: Uninstall NGNIX 
+      apt: 
+        name: nginx 
+        state: absent
+        purge: yes
+        autoremove: yes
+    - name: Clean NGINX Installation directory {{ nginx_install_dir }}
+      file:
+        path: "{{ nginx_install_dir }}/"
+        state: absent
     ##########################################
     ##### Apache2 HTTP Uninstall Section #####
     ##########################################
