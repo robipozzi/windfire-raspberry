@@ -1,4 +1,11 @@
 # Raspberry Pi automation
+- [Introduction](#introduction)
+- [Ansible configuration setup](#Ansible-configuration-setup)
+- [Apache2 installation automation task](#Apache2-installation-automation-task)
+- [Docker installation automation task](#Docker-installation-automation-task)
+- [References](#References)
+
+## Introduction
 This repository holds scripts, playbooks and configurations to automate infrastructure configuration tasks on Raspberry Pi boards.
 
 ## Ansible configuration setup

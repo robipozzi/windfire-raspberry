@@ -11,6 +11,9 @@ SCRIPT="raspberry-ssh.sh"
 ############
 sshRun()
 {
+	if [ -z $PLATFORM_OPTION ]; then 
+        printSelectDestination
+    fi
 	ssh pi@$DESTINATION -i /Users/robertopozzi/.ssh/ansible_rsa
 }
 
@@ -52,8 +55,7 @@ setDestination()
 # #################### MAIN ####################
 # ##############################################
 # ************ START evaluate args ************"
-if [ "$1" != " " ]; then
-	echo "Set Destination"
+if [ "$1" != "" ]; then
     setDestination
 fi
 # ************** END evaluate args **************"

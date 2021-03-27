@@ -18,7 +18,29 @@
         state: absent
         purge: yes
         autoremove: yes
-    - name: Clean Apache2 folder {{ apache2_doc_dir }}
+    - name: Clean Apache2 Installation directory {{ apache2_install_dir }}
+      file:
+        path: "{{ apache2_install_dir }}/"
+        state: absent
+    - name: Clean Apache2 doc directory {{ apache2_doc_dir }}
       file:
         path: "{{ apache2_doc_dir }}/"
+        state: absent
+    #####################################
+    ##### Clean Utilities Directory #####
+    #####################################
+    - name: Clean webservers utilities directory {{ remote_utilities_dir }}
+      file:
+        path: "{{ remote_utilities_dir }}/"
+        state: absent
+    ##############################################
+    ##### Clean Windfire application folders #####
+    ##############################################
+    - name: Clean Windfire folder {{ remote_app_home_dir }}
+      file:
+        path: "{{ remote_app_home_dir }}/"
+        state: absent
+    - name: Clean Windfire Restaurants folder {{ remote_windfire_restaurants_dest_dir }}
+      file:
+        path: "{{ remote_windfire_restaurants_dest_dir }}/"
         state: absent
