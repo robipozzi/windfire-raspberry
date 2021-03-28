@@ -1,0 +1,30 @@
+--- # Ansible Playbook to configure a set of Raspberry PIs in a consistent and repeatable way
+# Software installation and configuration for Raspberry PI boxes acting as Reverse Proxies
+- hosts: raspberry_proxy
+  remote_user: "{{ user }}"
+  become: yes
+  vars:
+    src_dir: "{{ playbook_dir }}"
+    mode: u=rwx
+  vars_files:
+    - "{{ src_dir }}/conf/raspberry-config.yml"
+    - "{{ src_dir }}/conf/nginx.yml"
+  tasks:
+    #########################
+    ##### NGINX Section #####
+    #########################
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+    - name: Start Nginx server
+      service:
+        name: nginx
+        state: started
+    - name: Copy Nginx utility scripts to remote server
+      copy:
+        src: "{{ src_dir }}/scripts/nginx"
+        dest: "{{ remote_home_dir }}/utilities/nginx/"
+        owner: "{{ user }}"
+        group: "{{ group }}"
+        mode: "{{ mode }}"

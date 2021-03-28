@@ -1,5 +1,6 @@
---- # Ansible Playbook to configure a set of Raspberry PIs in a consistent and repeatable way
-- hosts: raspberry
+--- # Ansible Playbook to clean up Raspberry PIs in a consistent and repeatable way
+# Software installation and configuration for Raspberry PI boxes acting as Reverse Proxies
+- hosts: raspberry_proxy
   remote_user: "{{ user }}"
   become: yes
   vars:
@@ -7,7 +8,6 @@
     mode: u=rwx
   vars_files:
     - "{{ src_dir }}/conf/raspberry-config.yml"
-    - "{{ src_dir }}/conf/apache2.yml"
     - "{{ src_dir }}/conf/nginx.yml"
   tasks:
     ###################################
@@ -23,10 +23,29 @@
         state: absent
         purge: yes
         autoremove: yes
+      ignore_errors: true
     - name: Clean NGINX Installation directory {{ nginx_install_dir }}
       file:
         path: "{{ nginx_install_dir }}/"
         state: absent
+    #####################################
+    ##### Clean Utilities Directory #####
+    #####################################
+    - name: Clean utilities directory {{ remote_utilities_dir }}
+      file:
+        path: "{{ remote_utilities_dir }}/"
+        state: absent
+# Software installation and configuration for Raspberry PI boxes acting as Application Servers
+- hosts: raspberry_appserver
+  remote_user: "{{ user }}"
+  become: yes
+  vars:
+    src_dir: "{{ playbook_dir }}"
+    mode: u=rwx
+  vars_files:
+    - "{{ src_dir }}/conf/raspberry-config.yml"
+    - "{{ src_dir }}/conf/apache2.yml"
+  tasks:
     ##########################################
     ##### Apache2 HTTP Uninstall Section #####
     ##########################################
@@ -47,7 +66,7 @@
     #####################################
     ##### Clean Utilities Directory #####
     #####################################
-    - name: Clean webservers utilities directory {{ remote_utilities_dir }}
+    - name: Clean utilities directory {{ remote_utilities_dir }}
       file:
         path: "{{ remote_utilities_dir }}/"
         state: absent

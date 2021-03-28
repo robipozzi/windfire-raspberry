@@ -1,4 +1,5 @@
 --- # Ansible Playbook to configure a set of Raspberry PIs in a consistent and repeatable way
+# Software installation and configuration for all Raspberry PI boxes
 - hosts: raspberry
   remote_user: "{{ user }}"
   become: yes
@@ -10,23 +11,62 @@
       - pi
   vars_files:
     - "{{ src_dir }}/conf/raspberry-config.yml"
-    - "{{ src_dir }}/conf/apache2.yml"
   ##########################
   ##### Docker Section #####
   ##########################
-  roles:
-    - geerlingguy.docker_arm
+  #roles:
+  #  - geerlingguy.docker_arm
   tasks:
-  ###########################
-  ##### Openssl Section #####
-  ###########################
+    ###########################
+    ##### Openssl Section #####
+    ###########################
     - name: Install Openssl 
       apt: 
         name: openssl 
         state: present
-  ################################
-  ##### Apache2 HTTP Section #####
-  ################################
+# Software installation and configuration for Raspberry PI boxes acting as Reverse Proxies
+- hosts: raspberry_proxy
+  remote_user: "{{ user }}"
+  become: yes
+  vars:
+    src_dir: "{{ playbook_dir }}"
+    mode: u=rwx
+  vars_files:
+    - "{{ src_dir }}/conf/raspberry-config.yml"
+    - "{{ src_dir }}/conf/nginx.yml"
+  tasks:
+    #########################
+    ##### NGINX Section #####
+    #########################
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+    - name: Start Nginx server
+      service:
+        name: nginx
+        state: started
+    - name: Copy Nginx utility scripts to remote server
+      copy:
+        src: "{{ src_dir }}/scripts/nginx"
+        dest: "{{ remote_home_dir }}/utilities/nginx/"
+        owner: "{{ user }}"
+        group: "{{ group }}"
+        mode: "{{ mode }}"
+# Software installation and configuration for Raspberry PI boxes acting as Application Servers
+- hosts: raspberry_appserver
+  remote_user: "{{ user }}"
+  become: yes
+  vars:
+    src_dir: "{{ playbook_dir }}"
+    mode: u=rwx
+  vars_files:
+    - "{{ src_dir }}/conf/raspberry-config.yml"
+    - "{{ src_dir }}/conf/apache2.yml"
+  tasks:
+    ################################
+    ##### Apache2 HTTP Section #####
+    ################################
     - name: Install Apache2 
       apt: 
         name: apache2 
@@ -36,10 +76,10 @@
         name: apache2 
         state: started
         enabled: yes
-    - name: Copy utility scripts to remote server
+    - name: Copy Apache2 utility scripts to remote server
       copy:
-        src: "{{ src_dir }}/scripts/"
-        dest: "{{ remote_home_dir }}/utilities/webservers/"
+        src: "{{ src_dir }}/scripts/apache2"
+        dest: "{{ remote_home_dir }}/utilities/apache2/"
         owner: "{{ user }}"
         group: "{{ group }}"
         mode: "{{ mode }}"
