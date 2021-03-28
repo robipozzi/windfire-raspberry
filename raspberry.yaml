@@ -17,6 +17,18 @@
   #roles:
   #  - geerlingguy.docker_arm
   tasks:
+    ###############################################
+    ##### Update package manager repositories #####
+    ###############################################
+    - name: Update package manager repositories cache
+      apt:
+        update_cache: yes
+    ######################################
+    ##### Upgrade installed packages #####
+    ######################################
+    - name: Upgrade installed packages
+      apt:
+        upgrade: dist
     ###########################
     ##### Openssl Section #####
     ###########################
@@ -49,7 +61,7 @@
     - name: Copy Nginx utility scripts to remote server
       copy:
         src: "{{ src_dir }}/scripts/nginx"
-        dest: "{{ remote_home_dir }}/utilities/nginx/"
+        dest: "{{ remote_home_dir }}/utilities/"
         owner: "{{ user }}"
         group: "{{ group }}"
         mode: "{{ mode }}"
@@ -79,7 +91,7 @@
     - name: Copy Apache2 utility scripts to remote server
       copy:
         src: "{{ src_dir }}/scripts/apache2"
-        dest: "{{ remote_home_dir }}/utilities/apache2/"
+        dest: "{{ remote_home_dir }}/utilities/"
         owner: "{{ user }}"
         group: "{{ group }}"
         mode: "{{ mode }}"

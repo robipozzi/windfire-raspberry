@@ -13,13 +13,21 @@
     ###################################
     ##### NGINX Uninstall Section #####
     ###################################
-    - name: Stop NGINX Services
+    - name: Stop Nginx Services
       service:
         name: nginx
         state: stopped
-    - name: Uninstall NGNIX 
+      ignore_errors: true
+    - name: Uninstall Nginx 
       apt: 
         name: nginx 
+        state: absent
+        purge: yes
+        autoremove: yes
+      ignore_errors: true
+    - name: Uninstall Nginx Common
+      apt: 
+        name: nginx-common
         state: absent
         purge: yes
         autoremove: yes
