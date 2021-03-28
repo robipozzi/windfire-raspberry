@@ -27,15 +27,16 @@ Change the parameters according to your environment.
 ## Installation automation task
 The **[raspberry.yaml](raspberry.yaml)** playbook is provided to do the following tasks:
 
-    * install OpenSSL
-    * install Apache2
-    * copy some utility scripts (provided in the *scripts* sub-folder) to Raspberry Pi.
-    * install Docker
+    * update package manager repo cache and upgrade installed packages on all Raspberry Pi boxes
+    * install OpenSSL on all Raspberry Pi boxes
+    * install Docker on all Raspberry Pi boxes
+    * install Nginx on Raspberry Pi boxes marked as proxies and copy utility scripts for Nginx (provided in the *scripts* sub-folder)
+    * install Apache2 on Raspberry Pi boxes marked as application servers and copy utility scripts for Apache2 (provided in the *scripts* sub-folder)
 
 Some convenient scripts are provided:
-* **[install-docker-role.sh](docker/install-docker-role.sh)**, which installs *geerlingguy.docker_arm* role (see Ansible Galaxy https://galaxy.ansible.com/geerlingguy/docker_arm and GitHub Repo https://github.com/geerlingguy/ansible-role-docker_arm for more info ) that installs Docker on Linux, specially tailored for ARM-based computers like the Raspberry Pi.
-* **[install.sh](install.sh)** uses *[raspberry.yaml](raspberry.yaml)* playbook that does the following tasks: 
-* **[uninstall.sh](uninstall.sh)** uses *[raspberry-uninstall.yaml](raspberry-uninstall.yaml)* playbook to uninstall Apache2 from Raspberry Pi.
+* **[install-docker-role.sh](docker/install-docker-role.sh)**, which installs *geerlingguy.docker_arm* role (see Ansible Galaxy https://galaxy.ansible.com/geerlingguy/docker_arm and GitHub Repo https://github.com/geerlingguy/ansible-role-docker_arm for more info) that installs Docker on Linux, specially tailored for ARM-based computers like the Raspberry Pi.
+* **[install.sh](install.sh)** uses *[raspberry.yaml](raspberry.yaml)* playbook to consistently configure Raspberry Pi boxes 
+* **[uninstall.sh](uninstall.sh)** uses *[raspberry-uninstall.yaml](raspberry-uninstall.yaml)* playbook to uninstall custom software from all Raspberry Pi boxes.
 
 Both playbooks refer to yaml files provided in *conf* sub-folder for common variables setup and usage.
 
