@@ -38,7 +38,7 @@ Some convenient scripts are provided:
 * **[install.sh](install.sh)** uses *[raspberry.yaml](raspberry.yaml)* playbook to consistently configure Raspberry Pi boxes 
 * **[uninstall.sh](uninstall.sh)** uses *[raspberry-uninstall.yaml](raspberry-uninstall.yaml)* playbook to uninstall custom software from all Raspberry Pi boxes.
 
-Both playbooks refer to yaml files provided in *conf* sub-folder for common variables setup and usage.
+Both playbooks refer to yaml files provided in *[conf](conf)* sub-folder for common variables setup and usage.
 
 ### Docker installation automation task
 To automate Docker installation on Raspberry Pi boxes using Ansible: follow instructions at https://www.rs-online.com/designspark/raspberry-pi-4-personal-datacentre-part-1-ansible-docker-and-nextcloud.
