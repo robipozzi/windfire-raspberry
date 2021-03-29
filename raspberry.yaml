@@ -14,8 +14,8 @@
   ##########################
   ##### Docker Section #####
   ##########################
-  #roles:
-  #  - geerlingguy.docker_arm
+  roles:
+    - geerlingguy.docker_arm
   tasks:
     ###############################################
     ##### Update package manager repositories #####

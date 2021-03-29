@@ -1,10 +1,13 @@
 --- # Ansible Playbook to install Docker on Raspberry PIs in a consistent and repeatable way
 - name: "Docker playbook"
   hosts: raspberry
+  remote_user: "{{ user }}"
   become: yes
   vars:
     docker_install_compose: false
     docker_users:
       - pi
+  vars_files:
+    - "../conf/raspberry-config.yml"
   roles:
     - geerlingguy.docker_arm

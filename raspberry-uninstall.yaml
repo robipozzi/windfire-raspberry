@@ -1,5 +1,5 @@
 --- # Ansible Playbook to clean up Raspberry PIs in a consistent and repeatable way
-# Software installation and configuration for Raspberry PI boxes acting as Reverse Proxies
+# Software un-installation from Raspberry PI boxes acting as Reverse Proxies
 - hosts: raspberry_proxy
   remote_user: "{{ user }}"
   become: yes
@@ -43,7 +43,7 @@
       file:
         path: "{{ remote_utilities_dir }}/"
         state: absent
-# Software installation and configuration for Raspberry PI boxes acting as Application Servers
+# Software un-installation from Raspberry PI boxes acting as Application Servers
 - hosts: raspberry_appserver
   remote_user: "{{ user }}"
   become: yes
@@ -88,4 +88,30 @@
     - name: Clean Windfire Restaurants folder {{ remote_windfire_restaurants_dest_dir }}
       file:
         path: "{{ remote_windfire_restaurants_dest_dir }}/"
+        state: absent
+# Docker un-installation from Raspberry PI boxes
+- hosts: raspberry
+  remote_user: "{{ user }}"
+  become: yes
+  vars_files:
+    - "{{ src_dir }}/conf/raspberry-config.yml"
+  tasks:
+    ####################################
+    ##### Docker Uninstall Section #####
+    ####################################
+    - name: Uninstall Docker 
+      apt: 
+        name: docker-ce
+        state: absent
+        purge: yes
+        autoremove: yes
+    - name: Uninstall Docker CLI
+      apt: 
+        name: docker-ce-cli
+        state: absent
+        purge: yes
+        autoremove: yes
+    - name: Remove /var/lib/docker directory
+      file:
+        path: "/var/lib/docker"
         state: absent

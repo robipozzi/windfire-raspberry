@@ -2,9 +2,8 @@
 - hosts: raspberry
   remote_user: "{{ user }}"
   become: yes
-  vars:
-    src_dir: "{{ playbook_dir }}"
-    mode: u=rwx
+  vars_files:
+    - "../conf/raspberry-config.yml"
   tasks:
     ####################################
     ##### Docker Uninstall Section #####
