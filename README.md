@@ -12,7 +12,7 @@ This repository holds scripts, playbooks and configurations to automate infrastr
 The scripts provided are based on Ansible technology (https://www.ansible.com/) for task automation; refer to Ansible technical 
 documentation (https://docs.ansible.com/) for detailed instructions regarding installation and setup.
 
-Ansible uses ssh to connect to the managed infrastructure, so you will first need to generate an ssh key pair; the script *[ansible-initialize.sh](ansible-initialize.sh)*, provided in the root folder of this repo, copies the public ssh key to a remote destination (you will need to pass it as a parameter when you launch the script), assuming you generated a key called *[ansible_rsa](ansible_rsa)* and saved it in *.ssh* sub-folder under your user home directory.
+Ansible uses ssh to connect to the managed infrastructure, so you will first need to generate an ssh key pair; the script *[ansible-initialize.sh](ansible-initialize.sh)*, provided in the root folder of this repo, copies the public ssh key to a remote destination (you will need to pass it as a parameter when you launch the script), assuming you generated a key called *ansible_rsa* and saved it in *.ssh* sub-folder under your user home directory.
 
 A file, named *[ansible.cfg](ansible.cfg)*, is also provided to set basic configurations needed to run Ansible; if you launch Ansible from the repo root directory, this file will be read and used as the source for configuration settings (unless you have set an ANSIBLE_CONFIG environment variable, which has precedence), the basic configuration you should have is something like this:
 
