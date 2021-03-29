@@ -11,12 +11,7 @@
       - pi
   vars_files:
     - "{{ src_dir }}/conf/raspberry-config.yml"
-  ##########################
-  ##### Docker Section #####
-  ##########################
-  roles:
-    - geerlingguy.docker_arm
-  tasks:
+  pre_tasks:
     ###############################################
     ##### Update package manager repositories #####
     ###############################################
@@ -36,6 +31,11 @@
       apt: 
         name: openssl 
         state: present
+  ##########################
+  ##### Docker Section #####
+  ##########################
+  roles:
+    - geerlingguy.docker_arm
 # Software installation and configuration for Raspberry PI boxes acting as Reverse Proxies
 - hosts: raspberry_proxy
   remote_user: "{{ user }}"
