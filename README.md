@@ -4,7 +4,7 @@
 - [Installation automation task](#Installation-automation-task)
     - [Docker installation automation task](#Docker-installation-automation-task)
 - [Projects](#projects)
-    - [Home Automation project](#home-automation-project)
+    - [Home Automation](#home-automation)
 - [References](#References)
 
 ## Introduction
@@ -50,7 +50,7 @@ General instructions on how to install and uninstall Docker on Raspberry Pi boxe
 ## Projects
 I use Raspberry in some projects I develop for fun.
 
-### Home Automation project
+### Home Automation
 This is a side project that I am developing to handle sensors for various Home Automation tasks; see https://github.com/robipozzi/windfire-home-automation
 
 ## References
