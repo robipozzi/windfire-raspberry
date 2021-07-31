@@ -1,1 +1,0 @@
-ansible-playbook home-automation.yaml

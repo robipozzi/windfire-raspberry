@@ -1,1 +1,0 @@
-./jkstopem.sh $HOME/dev/robipozzi-kafka/deployments/openshift/tls truststore.jks password root tls
