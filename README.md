@@ -3,7 +3,8 @@
 - [Ansible configuration setup](#Ansible-configuration-setup)
 - [Installation automation task](#Installation-automation-task)
     - [Docker installation automation task](#Docker-installation-automation-task)
-- [Home Automation project](#home-automation-project)
+- [Projects]
+    - [Home Automation project](#home-automation-project)
 - [References](#References)
 
 ## Introduction
@@ -46,8 +47,11 @@ To automate Docker installation on Raspberry Pi boxes using Ansible: follow inst
 
 General instructions on how to install and uninstall Docker on Raspberry Pi boxes are available at https://phoenixnap.com/kb/docker-on-raspberry-pi.
 
-## Home Automation project
-Raspberry is also used for sensors that I use in a side project I am developing for fun; see https://github.com/robipozzi/windfire-home-automation
+## Projects
+I use Raspberry in some projects I develop for fun.
+
+### Home Automation project
+This is a side project that I am developing to handle sensors for various Home Automation tasks; see https://github.com/robipozzi/windfire-home-automation
 
 ## References
 I wrote a more extensive article on how to use Ansible to automate various installation, configuration and application deployment tasks on Raspberry Pi, you can read it at the link here *https://bit.ly/3b13V9h*.
