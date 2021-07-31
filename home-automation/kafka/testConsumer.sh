@@ -1,0 +1,2 @@
+KAFKA_BROKER=robipozzi-kafka-kafka-tls-bootstrap-openshift-operators.robipozzi-rhocp-420022-3c76f4d12b7fe02f9cab56e64bec3e29-0000.eu-de.containers.appdomain.cloud:443 SSL=true TOPIC=test python3 testConsumer.py
+#KAFKA_BROKER=localhost:9092 TOPIC=test python3 testConsumer.py

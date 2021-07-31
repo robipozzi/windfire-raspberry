@@ -1,0 +1,1 @@
+Put here PEM files to use for secure connection to Kafka cluster

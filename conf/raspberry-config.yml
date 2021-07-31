@@ -2,6 +2,7 @@ user: pi
 group: pi
 remote_home_dir: /home/pi
 remote_utilities_dir: "{{ remote_home_dir }}/utilities"
+remote_homeautomation_home_dir: "{{ remote_home_dir }}/home-automation"
 remote_app_home_dir: "{{ remote_home_dir }}/windfire"
 remote_windfire_restaurants_dest_dir: "{{ remote_home_dir }}/windfire-restaurants-node"
 remote_windfire_restaurants_app_dir: "{{ remote_home_dir }}/windfire-restaurants-node/app"

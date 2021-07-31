@@ -1,1 +1,4 @@
 .DS_Store
+home-automation/kafka/tls/CARoot.pem
+home-automation/kafka/tls/cert_and_key.p12
+home-automation/kafka/tls/key.pem
