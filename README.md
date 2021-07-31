@@ -3,6 +3,7 @@
 - [Ansible configuration setup](#Ansible-configuration-setup)
 - [Installation automation task](#Installation-automation-task)
     - [Docker installation automation task](#Docker-installation-automation-task)
+- [Home Automation project](#home-automation-project)
 - [References](#References)
 
 ## Introduction
@@ -44,6 +45,9 @@ Both playbooks refer to yaml files provided in *[conf](conf)* sub-folder for com
 To automate Docker installation on Raspberry Pi boxes using Ansible: follow instructions at https://www.rs-online.com/designspark/raspberry-pi-4-personal-datacentre-part-1-ansible-docker-and-nextcloud.
 
 General instructions on how to install and uninstall Docker on Raspberry Pi boxes are available at https://phoenixnap.com/kb/docker-on-raspberry-pi.
+
+## Home Automation project
+[TODO]
 
 ## References
 I wrote a more extensive article on how to use Ansible to automate various installation, configuration and application deployment tasks on Raspberry Pi, you can read it at the link here *https://bit.ly/3b13V9h*.
