@@ -3,7 +3,7 @@
 - [Ansible configuration setup](#Ansible-configuration-setup)
 - [Installation automation task](#Installation-automation-task)
     - [Docker installation automation task](#Docker-installation-automation-task)
-- [Projects]
+- [Projects](#projects)
     - [Home Automation project](#home-automation-project)
 - [References](#References)
 
