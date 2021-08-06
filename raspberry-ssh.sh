@@ -14,7 +14,7 @@ sshRun()
 	if [ -z $PLATFORM_OPTION ]; then 
         printSelectDestination
     fi
-	ssh pi@$DESTINATION -i /Users/robertopozzi/.ssh/ansible_rsa
+	ssh pi@$DESTINATION -i $HOME/.ssh/ansible_rsa
 }
 
 ###############
