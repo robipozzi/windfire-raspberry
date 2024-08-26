@@ -1,0 +1,13 @@
+[local]
+#localhost
+127.0.0.1
+
+[raspberry]
+raspberry01
+raspberry02
+
+[sensors_raspberry]
+raspberry02
+
+[identitymanager_raspberry]
+raspberry01

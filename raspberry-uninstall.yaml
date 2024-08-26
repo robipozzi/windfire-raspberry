@@ -7,7 +7,7 @@
     src_dir: "{{ playbook_dir }}"
     mode: u=rwx
   vars_files:
-    - "{{ src_dir }}/conf/raspberry-config.yml"
+    - "{{ src_dir }}/conf/config.yml"
     - "{{ src_dir }}/conf/nginx.yml"
   tasks:
     ###################################

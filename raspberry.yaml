@@ -10,7 +10,7 @@
     docker_users:
       - pi
   vars_files:
-    - "{{ src_dir }}/conf/raspberry-config.yml"
+    - "{{ src_dir }}/conf/config.yml"
   pre_tasks:
     ###############################################
     ##### Update package manager repositories #####
