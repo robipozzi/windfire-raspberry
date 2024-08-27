@@ -15,6 +15,16 @@ sshCopy()
     echo ${cyn}Done${end}
 }
 
+#########################################################
+## It copies Ansible hosts file to /etc/ansible folder ##
+#########################################################
+copyAnsibleHostsFile()
+{
+	echo ${cyn}Copying Ansible hosts file to /etc/ansible folder ...${end}
+    sudo cp conf/hosts /etc/ansible/hosts
+    echo ${cyn}Done${end}
+}
+
 ###############
 ## printHelp ##
 ###############
