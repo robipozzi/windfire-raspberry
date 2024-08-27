@@ -2,6 +2,7 @@
 - [Introduction](#introduction)
 - [Ansible configuration setup](#Ansible-configuration-setup)
 - [Installation automation task](#Installation-automation-task)
+    - [Basic web infrastructure installation automation task](#Basic-web-infrastructure-installation-automation-task)
     - [Docker installation automation task](#Docker-installation-automation-task)
 - [Projects](#projects)
     - [Home Automation](#home-automation)
