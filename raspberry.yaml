@@ -6,9 +6,6 @@
   vars:
     src_dir: "{{ playbook_dir }}"
     mode: u=rwx
-    docker_install_compose: false
-    docker_users:
-      - pi
   vars_files:
     - "{{ src_dir }}/conf/config.yml"
   pre_tasks:
@@ -31,67 +28,3 @@
       apt: 
         name: openssl 
         state: present
-  ##########################
-  ##### Docker Section #####
-  ##########################
-  roles:
-    - geerlingguy.docker_arm
-# Software installation and configuration for Raspberry PI boxes acting as Reverse Proxies
-- hosts: raspberry_proxy
-  remote_user: "{{ user }}"
-  become: yes
-  vars:
-    src_dir: "{{ playbook_dir }}"
-    mode: u=rwx
-  vars_files:
-    - "{{ src_dir }}/conf/raspberry-config.yml"
-    - "{{ src_dir }}/conf/nginx.yml"
-  tasks:
-    #########################
-    ##### NGINX Section #####
-    #########################
-    - name: Install Nginx
-      apt:
-        name: nginx
-        state: present
-    - name: Start Nginx server
-      service:
-        name: nginx
-        state: started
-    - name: Copy Nginx utility scripts to remote server
-      copy:
-        src: "{{ src_dir }}/scripts/nginx"
-        dest: "{{ remote_home_dir }}/utilities/"
-        owner: "{{ user }}"
-        group: "{{ group }}"
-        mode: "{{ mode }}"
-# Software installation and configuration for Raspberry PI boxes acting as Application Servers
-- hosts: raspberry_appserver
-  remote_user: "{{ user }}"
-  become: yes
-  vars:
-    src_dir: "{{ playbook_dir }}"
-    mode: u=rwx
-  vars_files:
-    - "{{ src_dir }}/conf/raspberry-config.yml"
-    - "{{ src_dir }}/conf/apache2.yml"
-  tasks:
-    ################################
-    ##### Apache2 HTTP Section #####
-    ################################
-    - name: Install Apache2 
-      apt: 
-        name: apache2 
-        state: present
-    - name: Start and enable Apache2
-      service: 
-        name: apache2 
-        state: started
-        enabled: yes
-    - name: Copy Apache2 utility scripts to remote server
-      copy:
-        src: "{{ src_dir }}/scripts/apache2"
-        dest: "{{ remote_home_dir }}/utilities/"
-        owner: "{{ user }}"
-        group: "{{ group }}"
-        mode: "{{ mode }}"

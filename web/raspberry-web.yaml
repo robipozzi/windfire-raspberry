@@ -1,0 +1,89 @@
+--- # Ansible Playbook to configure a set of Raspberry PIs in a consistent and repeatable way
+# Software installation and configuration for all Raspberry PI boxes
+- hosts: raspberry
+  remote_user: "{{ user }}"
+  become: yes
+  vars:
+    src_dir: "{{ playbook_dir }}"
+    mode: u=rwx
+  vars_files:
+    - "{{ src_dir }}/conf/config.yml"
+  pre_tasks:
+    ###############################################
+    ##### Update package manager repositories #####
+    ###############################################
+    - name: Update package manager repositories cache
+      apt:
+        update_cache: yes
+    ######################################
+    ##### Upgrade installed packages #####
+    ######################################
+    - name: Upgrade installed packages
+      apt:
+        upgrade: dist
+    ###########################
+    ##### Openssl Section #####
+    ###########################
+    - name: Install Openssl 
+      apt: 
+        name: openssl 
+        state: present
+# Software installation and configuration for Raspberry PI boxes acting as Reverse Proxies
+- hosts: proxy_raspberry
+  remote_user: "{{ user }}"
+  become: yes
+  vars:
+    src_dir: "{{ playbook_dir }}"
+    mode: u=rwx
+  vars_files:
+    - "{{ src_dir }}/conf/config.yml"
+    - "{{ src_dir }}/conf/nginx.yml"
+  tasks:
+    #########################
+    ##### NGINX Section #####
+    #########################
+    - name: Install Nginx
+      apt:
+        name: nginx
+        state: present
+    - name: Start Nginx server
+      service:
+        name: nginx
+        state: started
+    - name: Copy Nginx utility scripts to remote server
+      copy:
+        src: "{{ src_dir }}/scripts/nginx"
+        dest: "{{ remote_utilities_dir }}"
+        owner: "{{ user }}"
+        group: "{{ group }}"
+        mode: "{{ mode }}"
+# Software installation and configuration for Raspberry PI boxes acting as Application Servers
+- hosts: appserver_raspberry
+  remote_user: "{{ user }}"
+  become: yes
+  vars:
+    src_dir: "{{ playbook_dir }}"
+    mode: u=rwx
+  vars_files:
+    - "{{ src_dir }}/conf/config.yml"
+    - "{{ src_dir }}/conf/apache2.yml"
+  tasks:
+    ################################
+    ##### Apache2 HTTP Section #####
+    ################################
+    - name: Install Apache2 
+      apt: 
+        name: apache2 
+        state: present
+    - name: Start and enable Apache2
+      service: 
+        name: apache2 
+        state: started
+        enabled: yes
+    - name: Copy Apache2 utility scripts to remote server
+      copy:
+        src: "{{ src_dir }}/scripts/apache2"
+        dest: "{{ remote_utilities_dir }}"
+        owner: "{{ user }}"
+        group: "{{ group }}"
+        mode: "{{ mode }}"

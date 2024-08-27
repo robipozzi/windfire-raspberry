@@ -1,6 +1,6 @@
 --- # Ansible Playbook to clean up Raspberry PIs in a consistent and repeatable way
 # Software un-installation from Raspberry PI boxes acting as Reverse Proxies
-- hosts: raspberry_proxy
+- hosts: proxy_raspberry
   remote_user: "{{ user }}"
   become: yes
   vars:
@@ -44,14 +44,14 @@
         path: "{{ remote_utilities_dir }}/"
         state: absent
 # Software un-installation from Raspberry PI boxes acting as Application Servers
-- hosts: raspberry_appserver
+- hosts: appserver_raspberry
   remote_user: "{{ user }}"
   become: yes
   vars:
     src_dir: "{{ playbook_dir }}"
     mode: u=rwx
   vars_files:
-    - "{{ src_dir }}/conf/raspberry-config.yml"
+    - "{{ src_dir }}/conf/config.yml"
     - "{{ src_dir }}/conf/apache2.yml"
   tasks:
     ##########################################
@@ -77,41 +77,4 @@
     - name: Clean utilities directory {{ remote_utilities_dir }}
       file:
         path: "{{ remote_utilities_dir }}/"
-        state: absent
-    ##############################################
-    ##### Clean Windfire application folders #####
-    ##############################################
-    - name: Clean Windfire folder {{ remote_app_home_dir }}
-      file:
-        path: "{{ remote_app_home_dir }}/"
-        state: absent
-    - name: Clean Windfire Restaurants folder {{ remote_windfire_restaurants_dest_dir }}
-      file:
-        path: "{{ remote_windfire_restaurants_dest_dir }}/"
-        state: absent
-# Docker un-installation from Raspberry PI boxes
-- hosts: raspberry
-  remote_user: "{{ user }}"
-  become: yes
-  vars_files:
-    - "{{ src_dir }}/conf/raspberry-config.yml"
-  tasks:
-    ####################################
-    ##### Docker Uninstall Section #####
-    ####################################
-    - name: Uninstall Docker 
-      apt: 
-        name: docker-ce
-        state: absent
-        purge: yes
-        autoremove: yes
-    - name: Uninstall Docker CLI
-      apt: 
-        name: docker-ce-cli
-        state: absent
-        purge: yes
-        autoremove: yes
-    - name: Remove /var/lib/docker directory
-      file:
-        path: "/var/lib/docker"
         state: absent

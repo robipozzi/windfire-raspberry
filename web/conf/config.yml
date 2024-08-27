@@ -1,0 +1,4 @@
+user: pi
+group: pi
+remote_home_dir: /home/pi
+remote_utilities_dir: "{{ remote_home_dir }}/utilities"

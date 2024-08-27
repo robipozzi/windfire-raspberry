@@ -8,6 +8,6 @@
     docker_users:
       - pi
   vars_files:
-    - "../conf/raspberry-config.yml"
+    - "../conf/config.yml"
   roles:
     - geerlingguy.docker_arm
