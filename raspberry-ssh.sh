@@ -32,8 +32,8 @@ printHelp()
 printSelectDestination()
 {
 	echo ${grn}Select Raspberry Box platform to connect: ${end}
-	echo "${grn}1. raspberry1${end}"
-    echo "${grn}2. raspberry2${end}"
+	echo "${grn}1. raspberry01${end}"
+    echo "${grn}2. raspberry02${end}"
 	read OPTION
 	setDestination
 }
@@ -41,9 +41,9 @@ printSelectDestination()
 setDestination()
 {
 	case $OPTION in
-		1)  DESTINATION="raspberry1"
+		1)  DESTINATION="raspberry01"
 			;;
-        2)  DESTINATION="raspberry2"
+        2)  DESTINATION="raspberry02"
 			;;
 		*) 	printf "\n${red}No valid option selected${end}\n"
 			printSelectDestination
