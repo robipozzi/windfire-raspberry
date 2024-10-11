@@ -6,8 +6,8 @@
 raspberry01
 raspberry02
 
-[sensors_raspberry]
+[sensors]
 raspberry02
 
-[identitymanager_raspberry]
+[identitymanager]
 raspberry01
