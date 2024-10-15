@@ -6,8 +6,11 @@
 raspberry01
 raspberry02
 
-[sensors]
-raspberry02
-
 [identitymanager]
 raspberry01
+
+[appserver]
+raspberry02
+
+[sensors]
+raspberry02
