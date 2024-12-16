@@ -40,6 +40,14 @@ A convenient scripts is provided:
 Playbook refers to **[config.yml](conf/config.yml)** yaml file provided in *[conf](conf)* sub-folder for common variables setup and usage.
 
 ### Software prereqs installation automation task
+[TODO]
+The **[raspberry-sw-prereqs.yaml](raspberry-sw-prereqs.yaml)** playbook is provided to do the following tasks on specific Raspberry boxes consistently:
+
+    * install OpenJDK on all *appserver* Raspberry Pi boxes
+    * install NodeJS on all *maps_service* Raspberry Pi boxes
+
+A convenient scripts is provided:
+* **[install-sw-prereqs.sh](install-sw-prereqs.sh)** uses *[raspberry-sw-prereqs.yaml](raspberry-sw-prereqs.yaml)* playbook to consistently configure Raspberry Pi boxes.
 
 ### Basic web infrastructure installation automation task
 A very basic infrastructure to run web applications can be made of two major components:
