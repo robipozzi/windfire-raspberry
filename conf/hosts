@@ -9,6 +9,9 @@ raspberry02
 [identitymanager]
 raspberry01
 
+[frontend]
+raspberry01
+
 [appserver]
 raspberry02
 
