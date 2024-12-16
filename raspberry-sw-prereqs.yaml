@@ -1,6 +1,6 @@
 --- # Ansible Playbook to configure a set of Raspberry PIs in a consistent and repeatable way
-# ===== Software installation and configuration for all Raspberry PI boxes
-- hosts: raspberry
+# ===== OpenJDK installation and configuration for "appserver" Raspberry PI boxes
+- hosts: appserver
   remote_user: "{{ user }}"
   become: yes
   vars:
@@ -8,7 +8,7 @@
     mode: u=rwx
   vars_files:
     - "{{ src_dir }}/conf/config.yml"
-  pre_tasks:
+  tasks:
     ###############################################
     ##### Update package manager repositories #####
     ###############################################
@@ -21,18 +21,23 @@
     - name: Upgrade installed packages
       apt:
         upgrade: dist
-    ###########################
-    ##### Openssl Section #####
-    ###########################
-    - name: Install Openssl 
-      apt: 
-        name: openssl 
+    ########################
+    ##### Java Section #####
+    ########################
+    - name: Install OpenJDK
+      apt:
+        name: default-jdk
         state: present
-# ===== NodeJs installation and configuration for "appserver" Raspberry PI boxes
-- hosts: appserver
+# ===== NodeJs installation and configuration for "maps_service" Raspberry PI boxes
+- hosts: maps_service
+  remote_user: "{{ user }}"
   become: yes
   vars:
+    src_dir: "{{ playbook_dir }}"
+    mode: u=rwx
     nodejs_version: "20.x"  # You can change this to the desired NodeJS version
+  vars_files:
+    - "{{ src_dir }}/conf/config.yml"
   tasks:
     - name: Update apt cache
       apt:

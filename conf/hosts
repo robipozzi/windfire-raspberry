@@ -15,5 +15,11 @@ raspberry01
 [appserver]
 raspberry02
 
+[maps_service]
+raspberry02
+
+[calendar_service]
+raspberry02
+
 [sensors]
 raspberry02

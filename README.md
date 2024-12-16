@@ -2,6 +2,7 @@
 - [Introduction](#introduction)
 - [Ansible configuration setup](#Ansible-configuration-setup)
 - [Installation automation task](#Installation-automation-task)
+    - [Software prereqs installation automation task](#Software-prereqs-installation-automation-task)
     - [Basic web infrastructure installation automation task](#Basic-web-infrastructure-installation-automation-task)
     - [Docker installation automation task](#Docker-installation-automation-task)
 - [Projects](#projects)
@@ -37,6 +38,8 @@ A convenient scripts is provided:
 * **[install.sh](install.sh)** uses *[raspberry.yaml](raspberry.yaml)* playbook to consistently configure Raspberry Pi boxes 
 
 Playbook refers to **[config.yml](conf/config.yml)** yaml file provided in *[conf](conf)* sub-folder for common variables setup and usage.
+
+### Software prereqs installation automation task
 
 ### Basic web infrastructure installation automation task
 A very basic infrastructure to run web applications can be made of two major components:
