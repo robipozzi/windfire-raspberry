@@ -82,3 +82,9 @@
     - name: Display npm version
       debug:
         msg: "Installed npm version: {{ npm_version.stdout }}"
+    - name: Install pm2 process manager for Node.js
+      npm:
+        name: pm2
+        global: yes
+        production: yes
+        state: present
