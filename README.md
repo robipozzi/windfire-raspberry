@@ -46,8 +46,7 @@ The **[raspberry-sw-prereqs.yaml](raspberry-sw-prereqs.yaml)** playbook is provi
     * install OpenJDK on all appserver Raspberry Pi boxes
     * install NodeJS, npm and pm2 on all maps_service Raspberry Pi boxes
 
-A convenient scripts is provided:
-* **[install-sw-prereqs.sh](install-sw-prereqs.sh)** uses *[raspberry-sw-prereqs.yaml](raspberry-sw-prereqs.yaml)* playbook to consistently configure Raspberry Pi boxes.
+A convenient scripts **[install-sw-prereqs.sh](install-sw-prereqs.sh)** is provided, using *[raspberry-sw-prereqs.yaml](raspberry-sw-prereqs.yaml)* playbook to consistently configure Raspberry Pi boxes, each with its own specific software stack.
 
 ### Basic web infrastructure installation automation task
 A very basic infrastructure to run web applications can be made of two major components:
