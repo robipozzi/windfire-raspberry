@@ -34,8 +34,7 @@ The **[raspberry.yaml](raspberry.yaml)** playbook is provided to do the followin
     * update package manager repo cache and upgrade installed packages on all Raspberry Pi boxes
     * install OpenSSL on all Raspberry Pi boxes
 
-A convenient scripts is provided:
-* **[install.sh](install.sh)** uses *[raspberry.yaml](raspberry.yaml)* playbook to consistently configure Raspberry Pi boxes 
+A convenient scripts **[install.sh](install.sh)** is provided, using *[raspberry.yaml](raspberry.yaml)* playbook to consistently configure Raspberry Pi boxes.
 
 Playbook refers to **[config.yml](conf/config.yml)** yaml file provided in *[conf](conf)* sub-folder for common variables setup and usage.
 
