@@ -1,0 +1,30 @@
+--- # Ansible Playbook to uninstall Grafana Cloud Alloy from Raspberry PIs
+- hosts: appserver
+  remote_user: "{{ user }}"
+  become: yes
+  vars_files:
+    - "conf/config.yml"
+  tasks:
+    ####################################################
+    ##### Grafana Cloud Alloy Uninstall Section    #####
+    ####################################################
+    - name: Stop and disable Alloy service
+      ansible.builtin.systemd:
+        name: alloy
+        state: stopped
+        enabled: no
+      ignore_errors: yes
+    - name: Uninstall Alloy package
+      ansible.builtin.apt:
+        name: alloy
+        state: absent
+        purge: yes
+        autoremove: yes
+    - name: Remove Alloy configuration directory
+      ansible.builtin.file:
+        path: "/etc/alloy"
+        state: absent
+    - name: Remove Alloy data directory
+      ansible.builtin.file:
+        path: "/var/lib/alloy"
+        state: absent

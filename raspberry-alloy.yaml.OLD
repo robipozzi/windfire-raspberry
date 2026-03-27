@@ -16,14 +16,12 @@
       ansible.builtin.include_role:
         name: grafana.grafana.alloy
       vars:
+        alloy_user: root
         alloy_config: |
-          prometheus.exporter.unix "node" {}
-
-          prometheus.scrape "node" {
-            targets    = prometheus.exporter.unix.node.targets
+          prometheus.scrape "default" {
+            targets = [{"__address__" = "localhost:12345"}]
             forward_to = [prometheus.remote_write.prom.receiver]
           }
-          
           prometheus.remote_write "prom" {
             endpoint {
                 url = "https://prometheus-prod-65-prod-eu-west-2.grafana.net/api/prom/push"
