@@ -28,7 +28,3 @@
       apt: 
         name: openssl 
         state: present
-    ####################################################
-    ##### Grafana Cloud Alloy installation Section #####
-    ####################################################
-    # TODO
