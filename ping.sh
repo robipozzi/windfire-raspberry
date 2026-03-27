@@ -1,1 +1,1 @@
-ansible raspberry -m ping -u pi
+ansible raspberry -m ping -vvv
