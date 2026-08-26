@@ -23,3 +23,6 @@ raspberry02
 
 [sensors]
 raspberry02
+
+[security_service]
+raspberry01
