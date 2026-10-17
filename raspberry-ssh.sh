@@ -11,7 +11,7 @@ SCRIPT="raspberry-ssh.sh"
 ############
 sshRun()
 {
-	if [ -z $PLATFORM_OPTION ]; then 
+	if [ -z "$DESTINATION" ]; then 
         printSelectDestination
     fi
 	ssh pi@$DESTINATION -i $HOME/.ssh/ansible_rsa

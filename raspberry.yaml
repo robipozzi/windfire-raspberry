@@ -40,7 +40,7 @@
         alloy_config: |
           remotecfg {
                   url            = "https://fleet-management-prod-011.grafana.net"
-                  id             = "raspberry02"
+                  id             = "{{ inventory_hostname }}"
                   poll_frequency = "60s"
                   attributes     = encoding.from_json(coalesce(``, `{}`))
 

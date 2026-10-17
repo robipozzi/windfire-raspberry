@@ -1,9 +1,9 @@
 --- # Ansible Playbook to uninstall Grafana Cloud Alloy from Raspberry PIs
-- hosts: appserver
+- hosts: raspberry
   remote_user: "{{ user }}"
   become: yes
   vars_files:
-    - "conf/config.yml"
+    - "{{ playbook_dir }}/../conf/config.yml"
   tasks:
     ####################################################
     ##### Grafana Cloud Alloy Uninstall Section    #####

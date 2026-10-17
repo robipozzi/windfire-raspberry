@@ -29,7 +29,7 @@
         name: openssl 
         state: present
 # Software installation and configuration for Raspberry PI boxes acting as Reverse Proxies
-- hosts: proxy_raspberry
+- hosts: frontend
   remote_user: "{{ user }}"
   become: yes
   vars:
@@ -58,7 +58,7 @@
         group: "{{ group }}"
         mode: "{{ mode }}"
 # Software installation and configuration for Raspberry PI boxes acting as Application Servers
-- hosts: appserver_raspberry
+- hosts: appserver
   remote_user: "{{ user }}"
   become: yes
   vars:

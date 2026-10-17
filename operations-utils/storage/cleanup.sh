@@ -1,3 +1,4 @@
+sudo -v || exit 1
 sudo apt-get autoremove -y
 echo "======================================================="
 sudo apt-get clean

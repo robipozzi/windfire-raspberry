@@ -3,7 +3,7 @@
   remote_user: "{{ user }}"
   become: yes
   vars_files:
-    - "../conf/raspberry-config.yml"
+    - "../conf/config.yml"
   tasks:
     ####################################
     ##### Docker Uninstall Section #####

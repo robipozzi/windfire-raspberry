@@ -1,6 +1,6 @@
 --- # Ansible Playbook to clean up Raspberry PIs in a consistent and repeatable way
 # Software un-installation from Raspberry PI boxes acting as Reverse Proxies
-- hosts: proxy_raspberry
+- hosts: frontend
   remote_user: "{{ user }}"
   become: yes
   vars:
@@ -44,7 +44,7 @@
         path: "{{ remote_utilities_dir }}/"
         state: absent
 # Software un-installation from Raspberry PI boxes acting as Application Servers
-- hosts: appserver_raspberry
+- hosts: appserver
   remote_user: "{{ user }}"
   become: yes
   vars:
