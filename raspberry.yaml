@@ -149,3 +149,194 @@
                   targets    = local.file_match.logs_integrations_integrations_node_exporter_direct_scrape.targets
                   forward_to = [loki.write.grafana_cloud_loki.receiver]
           }
+  tasks:
+    #######################
+    ##### UFW Section #####
+    #######################
+    # Package only: rules on existing boxes are hand-made and must stay untouched
+    - name: Install UFW
+      apt:
+        name: ufw
+        state: present
+    ##########################
+    ##### Chrony Section #####
+    ##########################
+    - name: Install Chrony (replaces systemd-timesyncd)
+      apt:
+        name: chrony
+        state: present
+    - name: Start and enable Chrony
+      service:
+        name: chrony
+        state: started
+        enabled: yes
+    ############################
+    ##### Step CLI Section #####
+    ############################
+    - name: Create apt keyrings directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+    - name: Get Smallstep apt repository signing key
+      get_url:
+        url: https://packages.smallstep.com/keys/apt/repo-signing-key.gpg
+        dest: /etc/apt/keyrings/smallstep.asc
+        mode: '0644'
+    - name: Add Smallstep apt repository
+      apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/smallstep.asc] https://packages.smallstep.com/stable/debian debs main"
+        filename: smallstep
+        state: present
+    - name: Install Step CLI
+      apt:
+        name: step-cli
+        state: present
+    ##############################################
+    ##### Automatic security updates Section #####
+    ##############################################
+    - name: Install unattended-upgrades, apt-listchanges and needrestart
+      apt:
+        name:
+          - unattended-upgrades
+          - apt-listchanges
+          - needrestart
+        state: present
+    # Non-interactive equivalent of 'dpkg-reconfigure -plow unattended-upgrades'
+    - name: Enable periodic package list update and unattended upgrades
+      copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+    # ${distro_codename} is expanded by unattended-upgrades, not by Jinja
+    - name: Allow Raspberry Pi Foundation origin in unattended upgrades
+      lineinfile:
+        path: /etc/apt/apt.conf.d/50unattended-upgrades
+        insertafter: '^Unattended-Upgrade::Origins-Pattern \{'
+        line: '        "origin=Raspberry Pi Foundation,codename=${distro_codename},label=Raspberry Pi Foundation";'
+    - name: Let needrestart restart services automatically (never prompt)
+      copy:
+        dest: /etc/needrestart/conf.d/50-autorestart.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          $nrconf{restart} = 'a';
+    ###################################
+    ##### Harden pi admin Section #####
+    ###################################
+    # Safety gates: stop before SSH passwords are disabled on a box without a key
+    - name: Check pi authorized_keys
+      stat:
+        path: /home/{{ user }}/.ssh/authorized_keys
+      register: pi_authorized_keys
+    - name: Assert pi has a non-empty authorized_keys
+      assert:
+        that:
+          - pi_authorized_keys.stat.exists
+          - pi_authorized_keys.stat.size > 0
+        fail_msg: "/home/{{ user }}/.ssh/authorized_keys is missing or empty: SSH hardening would lock you out"
+    - name: Get pi password status
+      command: passwd -S {{ user }}
+      register: pi_passwd_status
+      changed_when: false
+    - name: Assert pi has a usable password (needed by sudo)
+      assert:
+        that:
+          - pi_passwd_status.stdout.split()[1] == 'P'
+        fail_msg: "{{ user }} has no usable password (status {{ pi_passwd_status.stdout.split()[1] }}): sudo would be unusable"
+    - name: Remove pi passwordless sudo rule
+      file:
+        path: /etc/sudoers.d/010_pi-nopasswd
+        state: absent
+    - name: Look for passwordless sudo rules that apply to pi
+      shell: grep -rhE '^[[:space:]]*({{ user }}|%sudo|ALL)[[:space:]].*NOPASSWD' /etc/sudoers /etc/sudoers.d
+      register: pi_nopasswd
+      changed_when: false
+      failed_when: pi_nopasswd.rc > 1
+    - name: Assert sudo always asks pi for a password
+      assert:
+        that:
+          - pi_nopasswd.stdout_lines | length == 0
+        fail_msg: "NOPASSWD sudo rules still apply to {{ user }}: {{ pi_nopasswd.stdout_lines }}"
+    #################################
+    ##### SSH hardening Section #####
+    #################################
+    # sshd keeps the first value it reads: 10- wins over Raspberry Pi OS 50-cloud-init.conf
+    - name: Harden SSH daemon configuration
+      copy:
+        dest: /etc/ssh/sshd_config.d/10-hardening.conf
+        owner: root
+        group: root
+        mode: '0644'
+        validate: /usr/sbin/sshd -t -f %s
+        content: |
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PermitRootLogin no
+          PubkeyAuthentication yes
+          AllowUsers {{ user }}
+      notify: reload ssh
+  handlers:
+    # A reload keeps the Ansible SSH session that is already open
+    - name: reload ssh
+      command: /usr/sbin/sshd -t
+      notify: do reload ssh
+    - name: do reload ssh
+      service:
+        name: ssh
+        state: reloaded
+  post_tasks:
+    - name: Apply pending configuration changes before checks
+      meta: flush_handlers
+    ###########################
+    ##### Baseline checks #####
+    ###########################
+    - name: Check Chrony time synchronization
+      command: chronyc tracking
+      register: chrony_tracking
+      changed_when: false
+      until: "'Leap status     : Normal' in chrony_tracking.stdout"
+      retries: 12
+      delay: 5
+    - name: Show System time offset
+      debug:
+        msg: "{{ chrony_tracking.stdout_lines | select('match', '^System time') | first }}"
+    - name: Check unattended upgrades allowed origins
+      shell: unattended-upgrade --dry-run --debug 2>&1 | grep -i 'allowed origins'
+      register: uu_origins
+      changed_when: false
+    - name: Assert security and Raspberry Pi Foundation origins are allowed
+      assert:
+        that:
+          - "'Debian-Security' in uu_origins.stdout"
+          - "'Raspberry Pi Foundation' in uu_origins.stdout"
+        fail_msg: "Unexpected unattended-upgrades origins: {{ uu_origins.stdout }}"
+    - name: Get effective SSH daemon configuration
+      command: /usr/sbin/sshd -T
+      register: sshd_effective
+      changed_when: false
+    - name: Assert SSH daemon is hardened
+      assert:
+        that:
+          - "'passwordauthentication no' in sshd_effective.stdout_lines"
+          - "'kbdinteractiveauthentication no' in sshd_effective.stdout_lines"
+          - "'permitrootlogin no' in sshd_effective.stdout_lines"
+          - "'pubkeyauthentication yes' in sshd_effective.stdout_lines"
+          - "('allowusers ' ~ user) in sshd_effective.stdout_lines"
+    # Key login is already proven: this play connected with it
+    - name: Check password login is refused
+      command: >
+        ssh -o PubkeyAuthentication=no -o BatchMode=yes -o StrictHostKeyChecking=accept-new
+        {{ user }}@{{ inventory_hostname }} true
+      delegate_to: localhost
+      become: no
+      register: ssh_password_login
+      changed_when: false
+      failed_when: >
+        ssh_password_login.rc == 0 or
+        'Permission denied (publickey)' not in ssh_password_login.stderr

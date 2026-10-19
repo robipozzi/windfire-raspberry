@@ -33,6 +33,24 @@ The **[raspberry.yaml](raspberry.yaml)** playbook is provided to do the followin
 
     * update package manager repo cache and upgrade installed packages on all Raspberry Pi boxes
     * install OpenSSL on all Raspberry Pi boxes
+    * install and configure Grafana Cloud Alloy
+    * install UFW (package only: existing firewall rules are not changed and UFW is not enabled)
+    * install Chrony for time synchronization (it replaces systemd-timesyncd)
+    * install the Smallstep step CLI (step-cli) from the Smallstep apt repository
+    * enable unattended security upgrades, also allowing the Raspberry Pi Foundation origin, with needrestart set to restart services automatically
+    * harden the pi admin account: sudo always asks for pi's password (passwordless sudo rule removed)
+    * harden SSH (/etc/ssh/sshd_config.d/10-hardening.conf): key-only login, no root login, only pi allowed
+
+Before changing pi and SSH, the playbook stops if pi has no (or an empty) *authorized_keys* file or no usable password, so a box cannot be locked out.
+At the end it checks the result on every box:
+
+    * Chrony is synchronized (and shows the System time offset of each box)
+    * unattended-upgrades allows the Debian-Security and Raspberry Pi Foundation origins
+    * the effective sshd configuration (sshd -T) is hardened
+    * a password login from the control machine is refused with "Permission denied (publickey)"
+
+**Keep an existing SSH session to each Pi open until the playbook's checks pass**, so you can fix things if something goes wrong.
+Sudo on the Pis needs pi's password: Ansible asks for it once per run (BECOME password, *become_ask_pass* in *[ansible.cfg](ansible.cfg)*).
 
 A convenient scripts **[install.sh](install.sh)** is provided, using *[raspberry.yaml](raspberry.yaml)* playbook to consistently configure Raspberry Pi boxes.
 
