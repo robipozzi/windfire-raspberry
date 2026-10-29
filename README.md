@@ -34,18 +34,20 @@ The **[raspberry.yaml](raspberry.yaml)** playbook is provided to do the followin
     * update package manager repo cache and upgrade installed packages on all Raspberry Pi boxes
     * install OpenSSL on all Raspberry Pi boxes
     * install and configure Grafana Cloud Alloy
-    * install UFW (package only: existing firewall rules are not changed and UFW is not enabled)
+    * install UFW and allow SSH (22/tcp) from the admin laptop (*admin_ip*); on a new Pi (UFW not active) also set default deny incoming / allow outgoing and enable UFW, so only SSH from the laptop gets in; on a Pi where UFW is already active the other rules and the defaults are not changed
     * install Chrony for time synchronization (it replaces systemd-timesyncd)
     * install the Smallstep step CLI (step-cli) from the Smallstep apt repository
     * enable unattended security upgrades, also allowing the Raspberry Pi Foundation origin, with needrestart set to restart services automatically
     * harden the pi admin account: sudo always asks for pi's password (passwordless sudo rule removed)
     * harden SSH (/etc/ssh/sshd_config.d/10-hardening.conf): key-only login, no root login, only pi allowed
 
+UFW is enabled only when the playbook runs from *admin_ip*, otherwise it stops before enabling it; note that a Pi where UFW was deliberately disabled counts as new, so UFW gets enabled there too.
 Before changing pi and SSH, the playbook stops if pi has no (or an empty) *authorized_keys* file or no usable password, so a box cannot be locked out.
 At the end it checks the result on every box:
 
     * Chrony is synchronized (and shows the System time offset of each box)
     * unattended-upgrades allows the Debian-Security and Raspberry Pi Foundation origins
+    * UFW is active, denies incoming traffic by default and allows SSH from *admin_ip*
     * the effective sshd configuration (sshd -T) is hardened
     * a password login from the control machine is refused with "Permission denied (publickey)"
 
@@ -55,6 +57,27 @@ Sudo on the Pis needs pi's password: Ansible asks for it once per run (BECOME pa
 A convenient scripts **[install.sh](install.sh)** is provided, using *[raspberry.yaml](raspberry.yaml)* playbook to consistently configure Raspberry Pi boxes.
 
 Playbook refers to **[config.yml](conf/config.yml)** yaml file provided in *[conf](conf)* sub-folder for common variables setup and usage.
+
+### Firewall and SSH lockout recovery
+The UFW rules rely on the DHCP reservations of these IPs on the home router (variables in *[config.yml](conf/config.yml)*):
+
+| Variable | Host | IP |
+|---|---|---|
+| *admin_ip* | admin laptop | 192.168.1.27 |
+| *raspberry01_ip* | raspberry01 | 192.168.1.18 |
+| *raspberry02_ip* | raspberry02 | 192.168.1.2 |
+| *pi_core_ip* | pi-core | 192.168.1.10 |
+
+*raspberry01_ip*, *raspberry02_ip* and *pi_core_ip* are not used by a rule yet; they are recorded for rules that will be set in the future.
+
+If a reservation is lost or changed (e.g. the laptop gets a different IP), SSH from the laptop is blocked: restore the reservation, or update the variables and run the playbook again.
+
+If SSH is locked out:
+
+1. connect a monitor and keyboard to the Pi and log in as *pi* on the local console
+2. run `sudo ufw disable`
+3. fix the IP reservation, or allow the new IP: `sudo ufw allow from <ip> to any port 22 proto tcp comment 'SSH from admin laptop'`
+4. run `sudo ufw enable` and, before logging out of the console, check from a new SSH session that you can log in (`sudo ufw status verbose` shows the rules)
 
 ### Software prereqs installation automation task
 Once Raspberry Pi boxes are installed and configured with the common basic software stack, for each specific box (e.g.: *appserver*, *maps_service*, *calendar_service*, ...) a specific software stack is installed and configured.

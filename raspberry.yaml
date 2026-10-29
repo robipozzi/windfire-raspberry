@@ -153,11 +153,49 @@
     #######################
     ##### UFW Section #####
     #######################
-    # Package only: rules on existing boxes are hand-made and must stay untouched
+    # A Pi where ufw is not active yet is treated as new: defaults are set and ufw is enabled.
+    # Where ufw is already active only the SSH rule is ensured: hand-made rules and defaults stay untouched
     - name: Install UFW
       apt:
         name: ufw
         state: present
+    - name: Get UFW status
+      command: ufw status
+      register: ufw_initial_status
+      changed_when: false
+    - name: Get the IP this play connects from
+      shell: echo "$SSH_CLIENT"
+      become: no
+      register: ssh_client
+      changed_when: false
+      when: "'Status: inactive' in ufw_initial_status.stdout"
+    # Enabling ufw from any other IP would cut Ansible (and you) off the box
+    - name: Assert the play runs from the admin laptop before enabling UFW
+      assert:
+        that:
+          - ssh_client.stdout.split() | length > 0
+          - ssh_client.stdout.split()[0] == admin_ip
+        fail_msg: "Connected from '{{ ssh_client.stdout }}', not admin_ip {{ admin_ip }}: UFW not enabled"
+      when: "'Status: inactive' in ufw_initial_status.stdout"
+    - name: Set UFW default policies on a new Pi
+      community.general.ufw:
+        default: "{{ item.policy }}"
+        direction: "{{ item.direction }}"
+      loop:
+        - { direction: incoming, policy: deny }
+        - { direction: outgoing, policy: allow }
+      when: "'Status: inactive' in ufw_initial_status.stdout"
+    - name: Allow SSH from admin laptop
+      community.general.ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+        from_ip: "{{ admin_ip }}"
+        comment: SSH from admin laptop
+    - name: Enable UFW on a new Pi
+      community.general.ufw:
+        state: enabled
+      when: "'Status: inactive' in ufw_initial_status.stdout"
     ##########################
     ##### Chrony Section #####
     ##########################
@@ -316,6 +354,17 @@
           - "'Debian-Security' in uu_origins.stdout"
           - "'Raspberry Pi Foundation' in uu_origins.stdout"
         fail_msg: "Unexpected unattended-upgrades origins: {{ uu_origins.stdout }}"
+    - name: Get UFW status
+      command: ufw status verbose
+      register: ufw_status
+      changed_when: false
+    - name: Assert UFW is active, denies incoming and allows SSH from admin laptop
+      assert:
+        that:
+          - "'Status: active' in ufw_status.stdout"
+          - "'deny (incoming)' in ufw_status.stdout"
+          - ufw_status.stdout_lines | select('match', '^22/tcp\\s+ALLOW IN\\s+' ~ (admin_ip | regex_escape) ~ '\\s+# SSH from admin laptop') | list | length > 0
+        fail_msg: "Unexpected UFW status: {{ ufw_status.stdout_lines }}"
     - name: Get effective SSH daemon configuration
       command: /usr/sbin/sshd -T
       register: sshd_effective

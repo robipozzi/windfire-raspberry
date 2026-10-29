@@ -1,2 +1,9 @@
 user: pi
 group: pi
+# Fixed by DHCP reservations on the home router: ufw rules depend on them
+admin_ip: 192.168.1.27
+# raspberry01_ip, raspberry02_ip and pi_core_ip are not used by a rule yet;
+# they are recorded for rules that will be set in the future
+raspberry01_ip: 192.168.1.18
+raspberry02_ip: 192.168.1.2
+pi_core_ip: 192.168.1.10
