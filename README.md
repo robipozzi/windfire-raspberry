@@ -1,10 +1,13 @@
 # Raspberry Pi automation
+[![CI](https://github.com/robipozzi/windfire-raspberry/actions/workflows/ci.yml/badge.svg)](https://github.com/robipozzi/windfire-raspberry/actions/workflows/ci.yml)
+
 - [Introduction](#introduction)
 - [Ansible configuration setup](#Ansible-configuration-setup)
 - [Installation automation task](#Installation-automation-task)
     - [Software prereqs installation automation task](#Software-prereqs-installation-automation-task)
     - [Basic web infrastructure installation automation task](#Basic-web-infrastructure-installation-automation-task)
     - [Docker installation automation task](#Docker-installation-automation-task)
+- [CI and dependency monitoring](#CI-and-dependency-monitoring)
 - [Projects](#projects)
     - [Home Automation](#home-automation)
 - [References](#References)
@@ -118,6 +121,17 @@ Some convenient scripts are provided under *[docker](docker/)* sub-folder:
 * **[install-docker.sh](docker/install-docker.sh)** uses *[raspberry-docker.yaml](docker/raspberry-docker.yaml)* playbook to activate a Docker role on all Raspberry boxes 
 * **[uninstall-docker.sh](docker/uninstall-docker.sh)** uses *[raspberry-docker-uninstall.yaml](docker/raspberry-docker-uninstall.yaml)* playbook to uninstall Docker from all Raspberry Pi boxes.
 
+## CI and dependency monitoring
+The badge at the top of this page shows the status of the *[CI](.github/workflows/ci.yml)* workflow. The workflow runs on pull requests and on pushes to main, but its only job, dependency review, runs on pull requests: it fails if a pull request introduces a dependency with a vulnerability of high severity or above. Open the badge to see the individual runs and their logs.
+
+GitHub Actions is the only dependency ecosystem in this repository. *[dependabot.yml](.github/dependabot.yml)* checks it weekly and opens pull requests for new versions of the actions, grouping minor and patch updates, with at most 5 open at a time.
+
+Dependabot alerts are listed in the repository **Security** tab, under **Dependabot** (https://github.com/robipozzi/windfire-raspberry/security/dependabot). Each alert shows the affected package, its severity, the versions that fix it and, when available, a pull request with the fix. From the command line: `gh api repos/robipozzi/windfire-raspberry/dependabot/alerts`.
+
+An empty alert list does not mean everything is safe:
+
+* GitHub does not raise alerts for actions pinned to a commit SHA, which is how *[ci.yml](.github/workflows/ci.yml)* pins them, so review the weekly update pull requests instead
+* Dependabot does not monitor what the playbooks install on the Raspberry Pi boxes (apt packages, pm2, the *geerlingguy.docker_arm* Ansible role)
 
 ## Projects
 I use Raspberry in some projects I develop for fun.
