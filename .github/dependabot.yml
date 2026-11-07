@@ -1,14 +1,21 @@
 version: 2
+
+# Version updates (routine bumps) go to fix/dependabot-alerts through target-branch.
+# Security updates ignore target-branch: Dependabot always opens them
+# against the default branch (main), grouped by the repository setting
+# "Grouped security updates".
 updates:
-  # GitHub Actions is the only ecosystem in this repo: there are no
-  # requirements.txt, package.json or pom.xml files to monitor.
   - package-ecosystem: github-actions
     directory: /
+    target-branch: fix/dependabot-alerts
     schedule:
       interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Rome
     open-pull-requests-limit: 5
     groups:
-      github-actions-minor-and-patch:
+      minor-and-patch:
         update-types:
           - minor
           - patch
