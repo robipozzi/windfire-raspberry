@@ -2,9 +2,13 @@ name: CI
 
 on:
   pull_request:
+    branches:
+      - main
+      - fix/dependabot-alerts
   push:
     branches:
       - main
+      - fix/dependabot-alerts
 
 permissions:
   contents: read
