@@ -1,9 +1,0 @@
-# Copy this file to conf/grafana.yml and replace the dummy values with the details
-# of your Grafana Cloud stack (grafana.com > My Account > your stack > Details).
-# conf/grafana.yml is ignored by git: never commit it.
-grafana_fleet_url: https://fleet-management-prod-000.grafana.net
-grafana_fleet_user: "000000"
-grafana_prom_url: https://prometheus-prod-00-prod-eu-west-0.grafana.net/api/prom/push
-grafana_prom_user: "000000"
-grafana_loki_url: https://logs-prod-000.grafana.net/loki/api/v1/push
-grafana_loki_user: "000000"
