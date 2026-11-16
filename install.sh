@@ -15,10 +15,12 @@ if [ -z "$GCLOUD_RW_API_KEY" ]; then
   echo "${red}ERROR: GCLOUD_RW_API_KEY cannot be empty${end}"
   exit 1
 fi
+# Read by the playbook with lookup('env', ...): not passed on the command line
+export GCLOUD_RW_API_KEY
 
 echo "${yel}WARNING: the playbook hardens SSH and sudo; keep an existing SSH session to each Pi open until the playbook's checks pass${end}"
 
-ansible-playbook $ANSIBLE_PLAYBOOK --extra-vars "gcloud_rw_api_key=${GCLOUD_RW_API_KEY}"
+ansible-playbook $ANSIBLE_PLAYBOOK
 
 EXIT_CODE=$?
 if [ $EXIT_CODE -eq 0 ]; then
