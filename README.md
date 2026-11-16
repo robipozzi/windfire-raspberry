@@ -4,6 +4,7 @@
 - [Introduction](#introduction)
 - [Ansible configuration setup](#Ansible-configuration-setup)
 - [Installation automation task](#Installation-automation-task)
+    - [Grafana Cloud configuration](#Grafana-Cloud-configuration)
     - [Software prereqs installation automation task](#Software-prereqs-installation-automation-task)
     - [Basic web infrastructure installation automation task](#Basic-web-infrastructure-installation-automation-task)
     - [Docker installation automation task](#Docker-installation-automation-task)
@@ -36,7 +37,10 @@ The **[raspberry.yaml](raspberry.yaml)** playbook is provided to do the followin
 
     * update package manager repo cache and upgrade installed packages on all Raspberry Pi boxes
     * install OpenSSL on all Raspberry Pi boxes
-    * install and configure Grafana Cloud Alloy
+    * install and configure Grafana Cloud Alloy, which ships to Grafana Cloud (see [Grafana Cloud configuration](#Grafana-Cloud-configuration)):
+        * node metrics (unchanged)
+        * only the systemd journal of the units listed in *alloy_journal_units* and the kernel "[UFW BLOCK]" lines; /var/log is not read
+        * lines that look like they hold a secret (password, passwd, secret, token, authorization, api_key / api-key / apikey, client_secret, any case) are dropped before they leave the Pi
     * install UFW and allow SSH (22/tcp) from the admin laptop (*admin_ip*); on a new Pi (UFW not active) also set default deny incoming / allow outgoing and enable UFW, so only SSH from the laptop gets in; on a Pi where UFW is already active the other rules and the defaults are not changed
     * install Chrony for time synchronization (it replaces systemd-timesyncd)
     * install the Smallstep step CLI (step-cli) from the Smallstep apt repository
@@ -59,7 +63,31 @@ Sudo on the Pis needs pi's password: Ansible asks for it once per run (BECOME pa
 
 A convenient scripts **[install.sh](install.sh)** is provided, using *[raspberry.yaml](raspberry.yaml)* playbook to consistently configure Raspberry Pi boxes.
 
-Playbook refers to **[config.yml](conf/config.yml)** yaml file provided in *[conf](conf)* sub-folder for common variables setup and usage.
+Playbook refers to **[config.yml](conf/config.yml)** yaml file provided in *[conf](conf)* sub-folder for common variables setup and usage, and to *conf/grafana.yml* for the Grafana Cloud details (see below).
+
+### Grafana Cloud configuration
+The Grafana Cloud URLs and usernames are not stored in the repository. Before the first run:
+
+1. copy *[conf/grafana.yml_PLACEHOLDER](conf/grafana.yml_PLACEHOLDER)* to *conf/grafana.yml*: `cp conf/grafana.yml_PLACEHOLDER conf/grafana.yml`
+2. replace the dummy values with the details of your Grafana Cloud stack (grafana.com > My Account > your stack > Details):
+
+| Variable | Value |
+|---|---|
+| *grafana_fleet_url*, *grafana_fleet_user* | Fleet Management URL and username (Alloy *remotecfg*) |
+| *grafana_prom_url*, *grafana_prom_user* | Prometheus remote write URL (ending in /api/prom/push) and username |
+| *grafana_loki_url*, *grafana_loki_user* | Loki push URL (ending in /loki/api/v1/push) and username |
+
+*conf/grafana.yml* is in *[.gitignore](.gitignore)*: never commit it. The playbook stops before touching any Pi if the file is missing.
+
+The Grafana Cloud API key is read from the *GCLOUD_RW_API_KEY* environment variable, never from the command line: *[install.sh](install.sh)* asks for it and exports it; if you run `ansible-playbook raspberry.yaml` directly, run `read -rs GCLOUD_RW_API_KEY && export GCLOUD_RW_API_KEY` first. The playbook stops if the variable is empty.
+
+Logs shipped by Alloy:
+
+* the systemd journal of the units listed in *alloy_journal_units* in *[config.yml](conf/config.yml)* (keycloak, windfire-security, windfire-calendar, windfire-restaurants-backend, windfire-ui-react, ssh and unattended-upgrades by default); to ship another unit, add its name (e.g. *myapp.service*) to the list and run the playbook again
+* kernel lines that contain "[UFW BLOCK]" (connections blocked by UFW); other kernel lines are dropped
+* nothing from /var/log: the journal already holds those messages
+
+Any line matching `(?i)(password|passwd|secret|token|authorization|api[_-]?key|client_secret)` is dropped. Dropped lines are counted by Alloy in the *loki_process_dropped_lines_total* metric, with *reason* "sensitive_content" (secret-looking lines) or "kernel_not_ufw_block" (other kernel lines); check it on the Pi with `curl -s localhost:12345/metrics | grep loki_process_dropped_lines_total`.
 
 ### Firewall and SSH lockout recovery
 The UFW rules rely on the DHCP reservations of these IPs on the home router (variables in *[config.yml](conf/config.yml)*):
