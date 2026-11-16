@@ -7,3 +7,13 @@ admin_ip: 192.168.1.27
 raspberry01_ip: 192.168.1.18
 raspberry02_ip: 192.168.1.2
 pi_core_ip: 192.168.1.10
+# Alloy ships to Grafana Cloud only the journal of these systemd units
+# (plus kernel "[UFW BLOCK]" lines); everything else stays on the Pi
+alloy_journal_units:
+  - keycloak.service
+  - windfire-security.service
+  - windfire-calendar.service
+  - windfire-restaurants-backend.service
+  - windfire-ui-react.service
+  - ssh.service
+  - unattended-upgrades.service

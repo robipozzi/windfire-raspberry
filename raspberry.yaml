@@ -1,4 +1,20 @@
 --- # Ansible Playbook to configure a set of Raspberry PIs in a consistent and repeatable way
+# ===== Preflight checks on the control machine: stop before touching any Raspberry PI box
+- hosts: localhost
+  connection: local
+  gather_facts: no
+  become: no
+  tasks:
+    - name: Assert conf/grafana.yml exists
+      assert:
+        that:
+          - (playbook_dir ~ '/conf/grafana.yml') is file
+        fail_msg: "conf/grafana.yml is missing: copy conf/grafana.yml_PLACEHOLDER to conf/grafana.yml and set your Grafana Cloud values (see README)"
+    - name: Assert GCLOUD_RW_API_KEY is set
+      assert:
+        that:
+          - lookup('env', 'GCLOUD_RW_API_KEY') | length > 0
+        fail_msg: "GCLOUD_RW_API_KEY is empty: export it or run install.sh"
 # ===== Software installation and configuration for all Raspberry PI boxes
 - hosts: raspberry
   remote_user: "{{ user }}"
@@ -8,6 +24,7 @@
     mode: u=rwx
   vars_files:
     - "{{ src_dir }}/conf/config.yml"
+    - "{{ src_dir }}/conf/grafana.yml"
   pre_tasks:
     ###############################################
     ##### Update package manager repositories #####
@@ -36,26 +53,26 @@
         name: grafana.grafana.alloy
       vars:
         alloy_env_file_vars:
-          GCLOUD_RW_API_KEY: "{{ gcloud_rw_api_key }}"
+          GCLOUD_RW_API_KEY: "{{ lookup('env', 'GCLOUD_RW_API_KEY') }}"
         alloy_config: |
           remotecfg {
-                  url            = "https://fleet-management-prod-011.grafana.net"
+                  url            = "{{ grafana_fleet_url }}"
                   id             = "{{ inventory_hostname }}"
                   poll_frequency = "60s"
                   attributes     = encoding.from_json(coalesce(``, `{}`))
 
                   basic_auth {
-                          username = "1571786"
+                          username = "{{ grafana_fleet_user }}"
                           password = sys.env("GCLOUD_RW_API_KEY")
                   }
           }
 
           prometheus.remote_write "metrics_service" {
                   endpoint {
-                          url = "https://prometheus-prod-65-prod-eu-west-2.grafana.net/api/prom/push"
+                          url = "{{ grafana_prom_url }}"
 
                           basic_auth {
-                                  username = "3067800"
+                                  username = "{{ grafana_prom_user }}"
                                   password = sys.env("GCLOUD_RW_API_KEY")
                           }
                   }
@@ -63,10 +80,10 @@
 
           loki.write "grafana_cloud_loki" {
                   endpoint {
-                          url = "https://logs-prod-012.grafana.net/loki/api/v1/push"
+                          url = "{{ grafana_loki_url }}"
 
                           basic_auth {
-                                  username = "1529575"
+                                  username = "{{ grafana_loki_user }}"
                                   password = sys.env("GCLOUD_RW_API_KEY")
                           }
                   }
@@ -106,6 +123,13 @@
           discovery.relabel "logs_integrations_integrations_node_exporter_journal_scrape" {
                   targets = []
 
+                  // Keep only the units in alloy_journal_units, plus kernel lines (UFW, filtered in loki.process)
+                  rule {
+                          source_labels = ["__journal__systemd_unit", "__journal__transport"]
+                          regex         = `({{ alloy_journal_units | map('regex_escape') | join('|') }});.*|.*;kernel`
+                          action        = "keep"
+                  }
+
                   rule {
                           source_labels = ["__journal__systemd_unit"]
                           target_label  = "unit"
@@ -130,24 +154,27 @@
           loki.source.journal "logs_integrations_integrations_node_exporter_journal_scrape" {
                   max_age       = "24h0m0s"
                   relabel_rules = discovery.relabel.logs_integrations_integrations_node_exporter_journal_scrape.rules
-                  forward_to    = [loki.write.grafana_cloud_loki.receiver]
+                  forward_to    = [loki.process.journal.receiver]
                   labels        = {
                           instance = constants.hostname,
                           job      = "integrations/raspberrypi-node",
                   }
           }
 
-          local.file_match "logs_integrations_integrations_node_exporter_direct_scrape" {
-                  path_targets = [{
-                          __address__ = "localhost",
-                          __path__    = "/var/log/{syslog,messages,*.log}",
-                          instance    = constants.hostname,
-                          job         = "integrations/raspberrypi-node",
-                  }]
-          }
-          loki.source.file "logs_integrations_integrations_node_exporter_direct_scrape" {
-                  targets    = local.file_match.logs_integrations_integrations_node_exporter_direct_scrape.targets
+          // Drops are counted in loki_process_dropped_lines_total, by reason
+          loki.process "journal" {
                   forward_to = [loki.write.grafana_cloud_loki.receiver]
+
+                  stage.match {
+                          selector            = `{transport="kernel"} != "[UFW BLOCK]"`
+                          action              = "drop"
+                          drop_counter_reason = "kernel_not_ufw_block"
+                  }
+
+                  stage.drop {
+                          expression          = `(?i)(password|passwd|secret|token|authorization|api[_-]?key|client_secret)`
+                          drop_counter_reason = "sensitive_content"
+                  }
           }
   tasks:
     #######################
