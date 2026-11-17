@@ -88,7 +88,14 @@
                           }
                   }
           }
-          prometheus.exporter.unix "integrations_node_exporter" { }
+          
+          prometheus.exporter.unix "integrations_node_exporter" {
+            enable_collectors = ["systemd"]
+
+            systemd {
+              unit_include = "(keycloak|windfire.*|alloy|ufw|ssh|postgresql.*)\\.service"
+            }
+          }
 
           discovery.relabel "integrations_node_exporter" {
                   targets = prometheus.exporter.unix.integrations_node_exporter.targets
