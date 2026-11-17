@@ -93,7 +93,7 @@
             enable_collectors = ["systemd"]
 
             systemd {
-              unit_include = "(keycloak|windfire.*|alloy|ufw|ssh|postgresql.*)\\.service"
+              unit_include = "(keycloak|alloy|windfire-.*)\\.service"
             }
           }
 
@@ -172,15 +172,15 @@
           loki.process "journal" {
                   forward_to = [loki.write.grafana_cloud_loki.receiver]
 
+                  stage.drop {
+                          expression          = `(?i)(password|passwd|secret|token|authorization|api[_-]?key|client_secret)`
+                          drop_counter_reason = "sensitive_content"
+                  }
+
                   stage.match {
                           selector            = `{transport="kernel"} != "[UFW BLOCK]"`
                           action              = "drop"
                           drop_counter_reason = "kernel_not_ufw_block"
-                  }
-
-                  stage.drop {
-                          expression          = `(?i)(password|passwd|secret|token|authorization|api[_-]?key|client_secret)`
-                          drop_counter_reason = "sensitive_content"
                   }
           }
   tasks:

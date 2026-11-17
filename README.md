@@ -38,7 +38,7 @@ The **[raspberry.yaml](raspberry.yaml)** playbook is provided to do the followin
     * update package manager repo cache and upgrade installed packages on all Raspberry Pi boxes
     * install OpenSSL on all Raspberry Pi boxes
     * install and configure Grafana Cloud Alloy, which ships to Grafana Cloud (see [Grafana Cloud configuration](#Grafana-Cloud-configuration)):
-        * node metrics (unchanged)
+        * node metrics; the systemd collector reports only the keycloak, alloy and windfire-* units
         * only the systemd journal of the units listed in *alloy_journal_units* and the kernel "[UFW BLOCK]" lines; /var/log is not read
         * lines that look like they hold a secret (password, passwd, secret, token, authorization, api_key / api-key / apikey, client_secret, any case) are dropped before they leave the Pi
     * install UFW and allow SSH (22/tcp) from the admin laptop (*admin_ip*); on a new Pi (UFW not active) also set default deny incoming / allow outgoing and enable UFW, so only SSH from the laptop gets in; on a Pi where UFW is already active the other rules and the defaults are not changed
@@ -87,7 +87,7 @@ Logs shipped by Alloy:
 * kernel lines that contain "[UFW BLOCK]" (connections blocked by UFW); other kernel lines are dropped
 * nothing from /var/log: the journal already holds those messages
 
-Any line matching `(?i)(password|passwd|secret|token|authorization|api[_-]?key|client_secret)` is dropped. Dropped lines are counted by Alloy in the *loki_process_dropped_lines_total* metric, with *reason* "sensitive_content" (secret-looking lines) or "kernel_not_ufw_block" (other kernel lines); check it on the Pi with `curl -s localhost:12345/metrics | grep loki_process_dropped_lines_total`.
+The first stage drops any line matching `(?i)(password|passwd|secret|token|authorization|api[_-]?key|client_secret)`; then kernel lines without "[UFW BLOCK]" are dropped. Dropped lines are counted by Alloy in the *loki_process_dropped_lines_total* metric, with *reason* "sensitive_content" (secret-looking lines) or "kernel_not_ufw_block" (other kernel lines); check it on the Pi with `curl -s localhost:12345/metrics | grep loki_process_dropped_lines_total`.
 
 ### Firewall and SSH lockout recovery
 The UFW rules rely on the DHCP reservations of these IPs on the home router (variables in *[config.yml](conf/config.yml)*):
