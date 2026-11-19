@@ -1,0 +1,158 @@
+--- # Ansible Playbook to install the Windfire CA certificates in one shared, root-owned folder on every Raspberry PI box
+# Run it with deploy-windfire-ca.sh; raspberry-configure-windfire-infra.yaml imports it too.
+# The certificates come from the admin laptop (the CA private keys never leave it and never reach a Pi) and land in
+# windfire_ca_dir (/etc/windfire/ca): folder root:root 0755, certificates root:root 0644. Every service reads its CA
+# from there; only root can change it. Nothing is added to the system trust store.
+# ===== Pre-flight on the admin laptop: each CA file exists, is a certificate, holds no private key and is name constrained
+- hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    src_dir: "{{ playbook_dir }}"
+  vars_files:
+    - "{{ src_dir }}/conf/config.yml"
+  tasks:
+    - name: Check the CA certificates exist on the admin laptop
+      stat:
+        path: "{{ item.local_path }}"
+      loop: "{{ windfire_ca_certificates }}"
+      loop_control:
+        label: "{{ item.local_path }}"
+      register: local_ca_stat
+    - name: Fail if a CA certificate is missing on the admin laptop
+      fail:
+        msg: >-
+          {{ item.item.local_path }} not found: create it with windfire-security/ssl/createRootCA.sh
+          (Windfire Root CA) or windfire-security/keycloak/security/setupTLS.sh (Windfire Keycloak Root CA)
+      when: not item.stat.exists
+      loop: "{{ local_ca_stat.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+    # A CA file must be a public certificate only: a private key must never be copied to a Pi
+    - name: Check no CA file holds a private key
+      command: grep -q "PRIVATE KEY" "{{ item.local_path }}"
+      register: local_ca_key
+      failed_when: local_ca_key.rc == 0
+      changed_when: false
+      check_mode: false
+      loop: "{{ windfire_ca_certificates }}"
+      loop_control:
+        label: "{{ item.name }}"
+    # -text (not -ext) so the macOS LibreSSL openssl works too
+    - name: Read the CA certificates
+      command: openssl x509 -noout -text -in "{{ item.local_path }}"
+      register: local_ca_text
+      changed_when: false
+      check_mode: false
+      loop: "{{ windfire_ca_certificates }}"
+      loop_control:
+        label: "{{ item.name }}"
+    - name: Check each CA certificate is a CA with a critical nameConstraints extension
+      assert:
+        that:
+          - "'CA:TRUE' in item.stdout"
+          - "'X509v3 Name Constraints: critical' in item.stdout"
+        fail_msg: >-
+          {{ item.item.name }} is not a name constrained CA certificate: recreate it with the
+          windfire-security scripts (see Root CA name constraints in its README)
+        quiet: true
+      loop: "{{ local_ca_text.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+    - name: Read the SHA-256 fingerprints of the CA certificates
+      command: openssl x509 -noout -fingerprint -sha256 -in "{{ item.local_path }}"
+      register: local_ca_fingerprint
+      changed_when: false
+      check_mode: false
+      loop: "{{ windfire_ca_certificates }}"
+      loop_control:
+        label: "{{ item.name }}"
+    - name: Record the expected fingerprints
+      set_fact:
+        windfire_ca_expected_fingerprints: >-
+          {{ dict(local_ca_fingerprint.results | map(attribute='item.name')
+                  | zip(local_ca_fingerprint.results | map(attribute='stdout')
+                        | map('regex_replace', '^.*=', '') | map('upper'))) }}
+# ===== Install the CA certificates on every Raspberry PI box
+- hosts: raspberry
+  remote_user: "{{ user }}"
+  become: yes
+  vars:
+    src_dir: "{{ playbook_dir }}"
+  vars_files:
+    - "{{ src_dir }}/conf/config.yml"
+  tasks:
+    ######################################
+    ##### Windfire CA folder Section #####
+    ######################################
+    - name: Create the Windfire CA folder {{ windfire_ca_dir }} and its parent (root:root 0755)
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - "{{ windfire_ca_dir | dirname }}"
+        - "{{ windfire_ca_dir }}"
+    - name: Copy the CA certificates to {{ windfire_ca_dir }} (root:root 0644)
+      copy:
+        src: "{{ item.local_path }}"
+        dest: "{{ windfire_ca_dir }}/{{ item.name }}"
+        owner: root
+        group: root
+        mode: "0644"
+        validate: openssl x509 -noout -in %s
+      loop: "{{ windfire_ca_certificates }}"
+      loop_control:
+        label: "{{ item.name }}"
+    # Skipped in check mode: on a first run the files do not exist yet
+    - name: Read the SHA-256 fingerprints of the installed CA certificates
+      command: openssl x509 -noout -fingerprint -sha256 -in "{{ windfire_ca_dir }}/{{ item.name }}"
+      register: remote_ca_fingerprint
+      changed_when: false
+      when: not ansible_check_mode
+      loop: "{{ windfire_ca_certificates }}"
+      loop_control:
+        label: "{{ item.name }}"
+    - name: Check the installed CA certificates match the admin laptop's
+      assert:
+        that:
+          - (item.stdout | regex_replace('^.*=', '') | upper) == hostvars['localhost'].windfire_ca_expected_fingerprints[item.item.name]
+        fail_msg: "{{ windfire_ca_dir }}/{{ item.item.name }} on {{ inventory_hostname }} does not match the admin laptop's copy"
+        success_msg: "{{ item.item.name }} SHA-256 {{ item.stdout | regex_replace('^.*=', '') | upper }}"
+      when: not ansible_check_mode
+      loop: "{{ remote_ca_fingerprint.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+    #################################################################
+    ##### Legacy copies Section (windfire_ca_remove_legacy=true) #####
+    #################################################################
+    # Before the shared folder, every service deploy copied the CAs into its own folder and into the pi user's
+    # home folder. The pi home copies are deleted only when no systemd unit or deployed .env file references a
+    # CA certificate outside {{ windfire_ca_dir }} any more (i.e. every service has been redeployed).
+    - name: Remove the legacy CA copies from the pi home folder
+      when: windfire_ca_remove_legacy | bool
+      block:
+        - name: Find CA certificate paths outside {{ windfire_ca_dir }} in systemd units and deployed .env files
+          shell: |
+            { find /etc/systemd/system -type f \( -name '*.service' -o -name '*.conf' \);
+              find /home/pi -maxdepth 4 -type f \( -name '.env' -o -name '*.env' \) -not -path '*/node_modules/*'; } \
+              | xargs -r grep -HoE '[^[:space:]=:"]*RootCA\.crt' \
+              | grep -vF ':{{ windfire_ca_dir }}/' || true
+          args:
+            executable: /bin/bash
+          register: legacy_ca_references
+          changed_when: false
+          check_mode: false
+        - name: Fail if a service still reads a CA certificate outside {{ windfire_ca_dir }}
+          fail:
+            msg: >-
+              On {{ inventory_hostname }} these files still point at a CA certificate outside {{ windfire_ca_dir }},
+              redeploy their service first: {{ legacy_ca_references.stdout_lines | join(', ') }}
+          when: legacy_ca_references.stdout_lines | length > 0
+        - name: Delete the legacy CA copies
+          file:
+            path: "{{ item }}"
+            state: absent
+          loop: "{{ windfire_ca_legacy_copies }}"

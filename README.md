@@ -119,6 +119,7 @@ Once Raspberry Pi boxes are installed and configured with the common basic softw
 The **[raspberry-configure-windfire-infra.yaml](raspberry-configure-windfire-infra.yaml)** playbook is provided to do the following tasks on specific Raspberry boxes consistently:
 
     * ensure the UFW rules listed for each box in ufw_rules (see UFW rules as code below)
+    * install the Windfire CA certificates in /etc/windfire/ca on all boxes (see Windfire CA certificates below)
     * install OpenJDK on all appserver Raspberry Pi boxes
 
 <!-- windfire-maps retired (F20): the maps_service play is commented out in the playbook
@@ -171,6 +172,41 @@ Nothing is changed on the boxes (the become password is still asked):
 * the anti-lockout and final checks run as in a real run
 
 Compare with `sudo ufw status numbered` on the box if something looks unexpected.
+
+#### Windfire CA certificates
+Every Windfire service on the Raspberry Pi boxes trusts one of two private CAs: the **Windfire Root CA** (the services' own certificates) and the **Windfire Keycloak Root CA** (Keycloak's certificate). Both CA certificates live in **one shared folder per box**, `/etc/windfire/ca`, and every service reads the one it needs from there:
+
+| File | Read by |
+|---|---|
+| `/etc/windfire/ca/WindfireRootCA.crt` | windfire-calendar (`ROOT_CA_PATH`, calls to windfire-security) and the deploy health checks of windfire-security, windfire-calendar and windfire-ui-react |
+| `/etc/windfire/ca/WindfireKeycloakRootCA.crt` | windfire-security (`KEYCLOAK_CA_CERT_PATH`) and windfire-restaurants-backend (Spring SSL bundle `keycloak`) |
+
+The layout follows the usual rules for trust anchors:
+
+* a CA certificate holds only a public key, so every service user may read it: the folder is `root:root 0755`, the certificates `root:root 0644`;
+* what matters is who can **write** it: only root can, and the services' systemd sandbox (`ProtectSystem=strict`) keeps `/etc` read-only to them anyway;
+* the CA **private keys never reach a Pi**: they stay on the admin laptop (encrypted with sops when not in use), and the playbook refuses a CA file that holds a private key;
+* the CAs are **not** added to the system trust store (`/usr/local/share/ca-certificates`): each service points at the exact file it needs, so no other program on the box trusts them;
+* each service's own certificate and private key are **not** shared: they stay in the service's own `ssl` folder (`0500`, key `0400`), owned by its service user.
+
+The **[windfire-ca.yaml](windfire-ca.yaml)** playbook owns the folder, and the script **[deploy-windfire-ca.sh](deploy-windfire-ca.sh)** runs it (*[raspberry-configure-windfire-infra.yaml](raspberry-configure-windfire-infra.yaml)* imports it too, so a new box gets the folder with the rest of the infrastructure). It:
+
+1. checks on the admin laptop that `~/opt/windfire/ssl/truststore/WindfireRootCA.crt` and `~/opt/keycloak/ssl/truststore/WindfireKeycloakRootCA.crt` exist, hold no private key, and are CA certificates with a critical `nameConstraints` extension;
+2. creates `/etc/windfire/ca` and copies both certificates on every box (each copy is validated with `openssl x509`);
+3. checks that the SHA-256 fingerprint of each installed certificate matches the laptop's, and prints it.
+
+The service deploy playbooks no longer copy any CA certificate: they only check, before stopping the service, that the CA they need is in `/etc/windfire/ca`, owned by root and mode `0644`, and stop with a pointer to this script otherwise. Run it before the first deploy on a new box.
+
+    ./deploy-windfire-ca.sh --check     # dry run
+    ./deploy-windfire-ca.sh             # install or rotate the CA certificates
+
+**Rotating a CA.** Recreate it with the windfire-security scripts, reissue the server certificates, run `./deploy-windfire-ca.sh`, then redeploy the services so they restart with the new certificates.
+
+**Legacy copies.** Older deploys also copied the CAs into the `pi` user's home folder (`/home/pi/opt/windfire/ssl/truststore`, `/home/pi/opt/keycloak/ssl/truststore`). Once every service has been redeployed, remove them:
+
+    ./deploy-windfire-ca.sh --remove-legacy
+
+The playbook first checks that no systemd unit and no deployed `.env` file on the box still points at a CA certificate outside `/etc/windfire/ca`, and stops without deleting anything otherwise.
 
 ### Basic web infrastructure installation automation task
 A very basic infrastructure to run web applications can be made of two major components:

@@ -1,5 +1,5 @@
 --- # Ansible Playbook to configure the Windfire infrastructure on the Raspberry PIs in a consistent and repeatable way
-# (UFW rules per host and per-service software); run raspberry.yaml (install.sh) first
+# (UFW rules per host, the shared Windfire CA certificates and per-service software); run raspberry.yaml (install.sh) first
 # ===== UFW rules for all Raspberry PI boxes, from ufw_rules in conf/config.yml
 # Only ensures rules on a Pi where ufw is already active: never enables, resets or changes defaults (raspberry.yaml does that)
 - hosts: raspberry
@@ -108,6 +108,8 @@
           - "'Status: active' in ufw_status.stdout"
           - ufw_status.stdout_lines | select('match', '^22/tcp\\s+ALLOW IN\\s+' ~ (admin_ip | regex_escape) ~ '\\s+# SSH from admin laptop') | list | length > 0
         fail_msg: "Unexpected UFW status: {{ ufw_status.stdout_lines }}"
+# ===== Windfire CA certificates in /etc/windfire/ca on all Raspberry PI boxes (also run alone by deploy-windfire-ca.sh)
+- import_playbook: windfire-ca.yaml
 # ===== OpenJDK installation and configuration for "appserver" Raspberry PI boxes
 - hosts: appserver
   remote_user: "{{ user }}"
