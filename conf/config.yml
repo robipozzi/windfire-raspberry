@@ -2,8 +2,8 @@ user: pi
 group: pi
 # Fixed by DHCP reservations on the home router: ufw rules depend on them
 admin_ip: 192.168.1.27
-# raspberry01_ip, raspberry02_ip and pi_core_ip are not used by a rule yet;
-# they are recorded for rules that will be set in the future
+# raspberry02_ip and pi_core_ip are used by ufw_rules below;
+# raspberry01_ip is not used by a rule yet, it is recorded for rules that will be set in the future
 raspberry01_ip: 192.168.1.18
 raspberry02_ip: 192.168.1.2
 pi_core_ip: 192.168.1.10
@@ -17,3 +17,27 @@ alloy_journal_units:
   - windfire-ui-react.service
   - ssh.service
   - unattended-upgrades.service
+# UFW allow rules per host, ensured by raspberry-configure-windfire-infra.yaml (never reset).
+# Each rule: port, proto (tcp | udp | any), from (an IP or 'any'), comment.
+# The SSH rule from admin_ip is set by raspberry.yaml too: keep it identical here.
+ufw_rules:
+  raspberry01:
+    - { port: '22',   proto: tcp, from: "{{ admin_ip }}",       comment: SSH from admin laptop }
+    - { port: '8443', proto: tcp, from: "{{ pi_core_ip }}",     comment: Caddy -> Keycloak }
+    - { port: '7500', proto: tcp, from: "{{ pi_core_ip }}",     comment: Tang for pi-core }
+    - { port: '9443', proto: tcp, from: "{{ pi_core_ip }}",     comment: step-ca }
+    - { port: '9443', proto: tcp, from: "{{ admin_ip }}",       comment: step-ca admin }
+    - { port: '8443', proto: tcp, from: "{{ admin_ip }}",       comment: Keycloak admin }
+    - { port: '8444', proto: tcp, from: "{{ admin_ip }}",       comment: Windfire Security }
+    - { port: '8443', proto: tcp, from: "{{ raspberry02_ip }}", comment: Keycloak admin from raspberry02 }
+    - { port: '8444', proto: tcp, from: "{{ raspberry02_ip }}", comment: Windfire Security from raspberry02 }
+    - { port: '9000', proto: tcp, from: "{{ admin_ip }}",       comment: health check from admin laptop }
+    - { port: '8445', proto: tcp, from: "{{ admin_ip }}",       comment: windfire-ui-react }
+  raspberry02:
+    - { port: '22',   proto: tcp, from: "{{ admin_ip }}",       comment: SSH from admin laptop }
+    - { port: '8081', proto: tcp, from: "{{ admin_ip }}",       comment: Windfire Restaurants Backend }
+    - { port: '8443', proto: tcp, from: "{{ admin_ip }}",       comment: Windfire Calendar }
+    # windfire-maps: no rule left on the Pi, so none is listed here
+# true: delete the UFW rules that are not in ufw_rules (the SSH rule from admin_ip is always kept).
+# Override per run with -e ufw_prune_unlisted=true
+ufw_prune_unlisted: false
