@@ -7,6 +7,22 @@ admin_ip: 192.168.1.27
 raspberry01_ip: 192.168.1.18
 raspberry02_ip: 192.168.1.2
 pi_core_ip: 192.168.1.10
+# Windfire CA certificates (public certificates only, never the CA private keys), installed by the windfire_ca play of
+# raspberry-configure-windfire-infra.yaml (./configure-windfire-infra.sh --tags windfire_ca) in windfire_ca_dir on
+# every Raspberry PI box: the single copy every service reads.
+# The folder is root:root 0755 and the certificates root:root 0644: every service user can read them, only root can
+# change them. They are not added to the system trust store: each service points at the file it needs.
+windfire_ca_dir: /etc/windfire/ca
+local_home_dir: "{{ lookup('env', 'HOME') }}"
+windfire_ca_certificates:
+  - { name: WindfireRootCA.crt,         local_path: "{{ local_home_dir }}/opt/windfire/ssl/truststore/WindfireRootCA.crt" }
+  - { name: WindfireKeycloakRootCA.crt, local_path: "{{ local_home_dir }}/opt/keycloak/ssl/truststore/WindfireKeycloakRootCA.crt" }
+# Copies the service deploys used to put in the pi user's home folder, removed once no service references them:
+# ./configure-windfire-infra.sh --tags windfire_ca -e windfire_ca_remove_legacy=true
+windfire_ca_legacy_copies:
+  - /home/pi/opt/windfire/ssl/truststore/WindfireRootCA.crt
+  - /home/pi/opt/keycloak/ssl/truststore/WindfireKeycloakRootCA.crt
+windfire_ca_remove_legacy: false
 # Alloy ships to Grafana Cloud only the journal of these systemd units
 # (plus kernel "[UFW BLOCK]" lines); everything else stays on the Pi
 alloy_journal_units:
