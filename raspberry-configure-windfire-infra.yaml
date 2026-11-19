@@ -1,4 +1,113 @@
---- # Ansible Playbook to configure a set of Raspberry PIs in a consistent and repeatable way
+--- # Ansible Playbook to configure the Windfire infrastructure on the Raspberry PIs in a consistent and repeatable way
+# (UFW rules per host and per-service software); run raspberry.yaml (install.sh) first
+# ===== UFW rules for all Raspberry PI boxes, from ufw_rules in conf/config.yml
+# Only ensures rules on a Pi where ufw is already active: never enables, resets or changes defaults (raspberry.yaml does that)
+- hosts: raspberry
+  remote_user: "{{ user }}"
+  become: yes
+  vars:
+    src_dir: "{{ playbook_dir }}"
+    ufw_rules_host: "{{ ufw_rules[inventory_hostname] | default([]) }}"
+    # Always kept by the prune: the rule raspberry.yaml sets so Ansible (and you) can get in
+    ufw_ssh_admin_key: "22/tcp|ALLOW IN|{{ admin_ip }}"
+  vars_files:
+    - "{{ src_dir }}/conf/config.yml"
+  tasks:
+    #######################
+    ##### UFW Section #####
+    #######################
+    # Reads run in --check too (command tasks are otherwise skipped in check mode)
+    - name: Get UFW status
+      command: ufw status
+      register: ufw_initial_status
+      changed_when: false
+      check_mode: false
+    - name: Assert UFW is already active (enabled by raspberry.yaml)
+      assert:
+        that:
+          - "'Status: active' in ufw_initial_status.stdout"
+        fail_msg: "UFW is not active on {{ inventory_hostname }}: run install.sh (raspberry.yaml) first"
+    - name: Get the IP this play connects from
+      shell: echo "$SSH_CLIENT"
+      become: no
+      register: ssh_client
+      changed_when: false
+      check_mode: false
+    # Changing rules from any other IP could cut Ansible (and you) off the box
+    - name: Assert the play runs from the admin laptop before changing UFW rules
+      assert:
+        that:
+          - ssh_client.stdout.split() | length > 0
+          - ssh_client.stdout.split()[0] == admin_ip
+        fail_msg: "Connected from '{{ ssh_client.stdout }}', not admin_ip {{ admin_ip }}: UFW rules not changed"
+    - name: Ensure the UFW rules listed in ufw_rules
+      community.general.ufw:
+        rule: allow
+        port: "{{ item.port }}"
+        proto: "{{ item.proto | default('any') }}"
+        from_ip: "{{ item.from | default('any') }}"
+        comment: "{{ item.comment }}"
+      loop: "{{ ufw_rules_host }}"
+      loop_control:
+        label: "{{ item.port }}/{{ item.proto | default('any') }} from {{ item.from | default('any') }} ({{ item.comment }})"
+    ###################################
+    ##### UFW prune (optional)    #####
+    ###################################
+    - name: Prune UFW rules not listed in ufw_rules
+      when: ufw_prune_unlisted | bool
+      block:
+        - name: Assert ufw_rules has rules for this host before pruning
+          assert:
+            that:
+              - ufw_rules_host | length > 0
+            fail_msg: "ufw_rules has no rules for {{ inventory_hostname }}: prune refused, it would delete every rule but SSH"
+        - name: Get numbered UFW rules
+          command: ufw status numbered
+          register: ufw_numbered
+          changed_when: false
+          check_mode: false
+        # Rule key: "<to>|<action>|<from>", (v6) dropped so a v6 twin matches its listed rule
+        - name: Find UFW rules not listed in ufw_rules
+          set_fact:
+            ufw_unlisted_json: >-
+              {%- set wanted = [ufw_ssh_admin_key] -%}
+              {%- for r in ufw_rules_host -%}
+              {%- set proto = r.proto | default('any') -%}
+              {%- set src = r.from | default('any') -%}
+              {%- set _ = wanted.append(r.port ~ ('' if proto == 'any' else '/' ~ proto) ~ '|ALLOW IN|' ~ ('Anywhere' if src == 'any' else src)) -%}
+              {%- endfor -%}
+              {%- set unlisted = [] -%}
+              {%- for line in ufw_numbered.stdout_lines -%}
+              {%- set m = line | regex_search('^\\[\\s*(\\d+)\\]\\s+(.+?)\\s{2,}(ALLOW|DENY|REJECT|LIMIT)( IN| OUT|)\\s+(.+?)\\s*(#.*)?$', '\\1', '\\2', '\\3', '\\4', '\\5') -%}
+              {%- if m -%}
+              {%- set key = (m[1] | replace(' (v6)', '')) ~ '|' ~ m[2] ~ m[3] ~ '|' ~ (m[4] | replace(' (v6)', '')) -%}
+              {%- if key not in wanted -%}
+              {%- set _ = unlisted.append({'num': m[0] | int, 'rule': line | regex_replace('^\\[\\s*\\d+\\]\\s+', '')}) -%}
+              {%- endif -%}
+              {%- endif -%}
+              {%- endfor -%}
+              {{ unlisted | to_json }}
+        - name: Show UFW rules that will be deleted
+          debug:
+            msg: "{{ ufw_unlisted_json | from_json | map(attribute='rule') | list }}"
+        # Highest number first, so the numbers of the rules still to delete do not shift
+        - name: Delete UFW rules not listed in ufw_rules
+          command: ufw --force delete {{ item.num }}
+          loop: "{{ ufw_unlisted_json | from_json | sort(attribute='num', reverse=true) }}"
+          loop_control:
+            label: "[{{ item.num }}] {{ item.rule }}"
+  post_tasks:
+    - name: Get UFW status after the changes
+      command: ufw status verbose
+      register: ufw_status
+      changed_when: false
+      check_mode: false
+    - name: Assert UFW is still active and allows SSH from admin laptop
+      assert:
+        that:
+          - "'Status: active' in ufw_status.stdout"
+          - ufw_status.stdout_lines | select('match', '^22/tcp\\s+ALLOW IN\\s+' ~ (admin_ip | regex_escape) ~ '\\s+# SSH from admin laptop') | list | length > 0
+        fail_msg: "Unexpected UFW status: {{ ufw_status.stdout_lines }}"
 # ===== OpenJDK installation and configuration for "appserver" Raspberry PI boxes
 - hosts: appserver
   remote_user: "{{ user }}"
@@ -28,71 +137,72 @@
       apt:
         name: default-jdk
         state: present
-# ===== NodeJs installation and configuration for "maps_service" Raspberry PI boxes
-- hosts: maps_service
-  remote_user: "{{ user }}"
-  become: yes
-  vars:
-    src_dir: "{{ playbook_dir }}"
-    mode: u=rwx
-    nodejs_version: "26.x"  # You can change this to the desired NodeJS version
-  vars_files:
-    - "{{ src_dir }}/conf/config.yml"
-  tasks:
-    - name: Update apt cache
-      apt:
-        update_cache: yes
-      changed_when: false
-    - name: Install required packages
-      apt:
-        name:
-          - apt-transport-https
-          - curl
-          - gnupg
-        state: present
-    - name: Ensure /etc/apt/keyrings directory exists
-      file:
-        path: /etc/apt/keyrings
-        state: directory
-        mode: "0755"
-    - name: Download NodeSource repository signing key
-      get_url:
-        url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
-        dest: /etc/apt/keyrings/nodesource.asc
-        mode: "0644"
-    # Own the whole file: apt_repository only adds lines, so a previous major's line would stay
-    - name: Set NodeJS repository
-      copy:
-        dest: /etc/apt/sources.list.d/nodesource.list
-        content: "deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_{{ nodejs_version }} nodistro main\n"
-        mode: "0644"
-    - name: Remove old NodeSource signing key
-      file:
-        path: /etc/apt/keyrings/nodesource.gpg
-        state: absent
-    - name: Install NodeJS
-      apt:
-        name:
-          - nodejs
-        state: latest
-        update_cache: yes
-    - name: Verify NodeJS installation
-      command: node --version
-      register: node_version
-      changed_when: false
-    - name: Display NodeJS version
-      debug:
-        msg: "Installed NodeJS version: {{ node_version.stdout }}"
-    - name: Verify npm installation
-      command: npm --version
-      register: npm_version
-      changed_when: false
-    - name: Display npm version
-      debug:
-        msg: "Installed npm version: {{ npm_version.stdout }}"
-    - name: Install pm2 process manager for Node.js
-      npm:
-        name: pm2
-        global: yes
-        production: yes
-        state: present
+# windfire-maps retired (F20): kept commented for reference
+# # ===== NodeJs installation and configuration for "maps_service" Raspberry PI boxes
+# - hosts: maps_service
+#   remote_user: "{{ user }}"
+#   become: yes
+#   vars:
+#     src_dir: "{{ playbook_dir }}"
+#     mode: u=rwx
+#     nodejs_version: "26.x"  # You can change this to the desired NodeJS version
+#   vars_files:
+#     - "{{ src_dir }}/conf/config.yml"
+#   tasks:
+#     - name: Update apt cache
+#       apt:
+#         update_cache: yes
+#       changed_when: false
+#     - name: Install required packages
+#       apt:
+#         name:
+#           - apt-transport-https
+#           - curl
+#           - gnupg
+#         state: present
+#     - name: Ensure /etc/apt/keyrings directory exists
+#       file:
+#         path: /etc/apt/keyrings
+#         state: directory
+#         mode: "0755"
+#     - name: Download NodeSource repository signing key
+#       get_url:
+#         url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+#         dest: /etc/apt/keyrings/nodesource.asc
+#         mode: "0644"
+#     # Own the whole file: apt_repository only adds lines, so a previous major's line would stay
+#     - name: Set NodeJS repository
+#       copy:
+#         dest: /etc/apt/sources.list.d/nodesource.list
+#         content: "deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_{{ nodejs_version }} nodistro main\n"
+#         mode: "0644"
+#     - name: Remove old NodeSource signing key
+#       file:
+#         path: /etc/apt/keyrings/nodesource.gpg
+#         state: absent
+#     - name: Install NodeJS
+#       apt:
+#         name:
+#           - nodejs
+#         state: latest
+#         update_cache: yes
+#     - name: Verify NodeJS installation
+#       command: node --version
+#       register: node_version
+#       changed_when: false
+#     - name: Display NodeJS version
+#       debug:
+#         msg: "Installed NodeJS version: {{ node_version.stdout }}"
+#     - name: Verify npm installation
+#       command: npm --version
+#       register: npm_version
+#       changed_when: false
+#     - name: Display npm version
+#       debug:
+#         msg: "Installed npm version: {{ npm_version.stdout }}"
+#     - name: Install pm2 process manager for Node.js
+#       npm:
+#         name: pm2
+#         global: yes
+#         production: yes
+#         state: present

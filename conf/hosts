@@ -15,8 +15,9 @@ raspberry01
 [appserver]
 raspberry02
 
-[maps_service]
-raspberry02
+# windfire-maps retired (F20)
+# [maps_service]
+# raspberry02
 
 [calendar_service]
 raspberry02
