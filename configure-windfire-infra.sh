@@ -15,7 +15,7 @@ echo "${cyn}  Raspberry PIs - Windfire infrastructure configuration ${end}"
 echo "${cyn}==========================================================${end}"
 echo "${grn}Starting Ansible playbook: $ANSIBLE_PLAYBOOK $*${end}"
 
-ansible-playbook $ANSIBLE_PLAYBOOK "$@"
+runWithAnsibleSshKey ansible-playbook $ANSIBLE_PLAYBOOK "$@"
 
 EXIT_CODE=$?
 if [ $EXIT_CODE -eq 0 ]; then
