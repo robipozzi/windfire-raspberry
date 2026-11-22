@@ -20,7 +20,7 @@ export GCLOUD_RW_API_KEY
 
 echo "${yel}WARNING: the playbook hardens SSH and sudo; keep an existing SSH session to each Pi open until the playbook's checks pass${end}"
 
-ansible-playbook $ANSIBLE_PLAYBOOK
+runWithAnsibleSshKey ansible-playbook $ANSIBLE_PLAYBOOK
 
 EXIT_CODE=$?
 if [ $EXIT_CODE -eq 0 ]; then
