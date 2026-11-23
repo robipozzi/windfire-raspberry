@@ -1,4 +1,7 @@
-source setenv.sh
+# Run from this script's folder, so ./setenv.sh and ansible.cfg are always this repo's. A bare
+# "source setenv.sh" searches $PATH first and can load another project's setenv.sh.
+cd "$(dirname "$0")" || exit 1
+source ./setenv.sh
 
 ###### Variable section - START
 OPTION=$1
