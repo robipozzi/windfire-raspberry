@@ -242,23 +242,19 @@ It has its own playbook, **[cloudflare-tunnel.yaml](cloudflare-tunnel.yaml)**, a
 
 **Version.** Cloudflare's apt repository keeps only the latest build. On a box without cloudflared the playbook installs *cloudflared_version* (in *[config.yml](conf/config.yml)*; bump it when that build is gone from the repository). Afterwards unattended-upgrades keeps cloudflared current (needrestart restarts it) and the playbook never downgrades it: it only checks that it is at least *cloudflared_min_version* (2025.4.0, the first release with `--token-file`) and that `cloudflared tunnel run --help` lists `--token-file`; if not, it stops before touching the credential or the unit. The unit starts cloudflared with `--no-autoupdate`: updates come only from apt.
 
-**The tunnel token is never stored in this repository**, not even sops-encrypted: it lives in your password manager. *cloudflare/\*token\** is in *[.gitignore](.gitignore)* as a safety net. The playbook reads it only from the *WINDFIRE_TUNNEL_TOKEN* environment variable on the admin laptop (no file, no prompt) and pipes it on stdin to `systemd-creds encrypt --name=tunnel-token - /etc/credstore.encrypted/cloudflared-tunnel-token` on the Pi (root:root 0600). Every task that touches it has `no_log: true` and the play uses Ansible pipelining, so the token never appears in a command line, a temp file, the Ansible log or `-v` output; the playbook refuses to run with *ANSIBLE_KEEP_REMOTE_FILES* or *ANSIBLE_DEBUG* set. The plaintext token never touches the Pi's disk: systemd decrypts the credential into the unit's private credentials directory at start (`LoadCredentialEncrypted=`), and cloudflared reads it with `--token-file ${CREDENTIALS_DIRECTORY}/tunnel-token`.
+**The tunnel token is never stored in this repository**, not even sops-encrypted: it lives in your password manager. *cloudflare/\*token\** is in *[.gitignore](.gitignore)* as a safety net. *[configure-cloudflare-tunnel.sh](configure-cloudflare-tunnel.sh)* asks for it at the terminal (not echoed), keeps it in a non-exported variable of its own process and hands it only to `ansible-playbook`, in the *WINDFIRE_TUNNEL_TOKEN* environment variable (never on a command line); it is gone when the script ends. The playbook reads it only from that variable (no file) and pipes it on stdin to `systemd-creds encrypt --name=tunnel-token - /etc/credstore.encrypted/cloudflared-tunnel-token` on the Pi (root:root 0600). Every task that touches it has `no_log: true` and the play uses Ansible pipelining, so the token never appears in a command line, a temp file, the Ansible log or `-v` output; the playbook refuses to run with *ANSIBLE_KEEP_REMOTE_FILES* or *ANSIBLE_DEBUG* set. The plaintext token never touches the Pi's disk: systemd decrypts the credential into the unit's private credentials directory at start (`LoadCredentialEncrypted=`), and cloudflared reads it with `--token-file ${CREDENTIALS_DIRECTORY}/tunnel-token`.
 
-* *WINDFIRE_TUNNEL_TOKEN* set: the credential is created or replaced (rotation)
-* not set and the credential exists: it is left untouched
-* not set and no credential yet: the playbook stops and tells you how to pass the token
+* token pasted: the credential is created or replaced (rotation)
+* Enter (no token) and the credential exists: it is left untouched
+* Enter (no token) and no credential yet: the playbook stops and tells you to run the script again and paste the token
 
-Store or rotate the token (paste it from the password manager; `read -s` does not echo it, and the variable is exported only for that one command):
-
-    read -rs WINDFIRE_TUNNEL_TOKEN
-    WINDFIRE_TUNNEL_TOKEN="$WINDFIRE_TUNNEL_TOKEN" ./configure-cloudflare-tunnel.sh
-    unset WINDFIRE_TUNNEL_TOKEN
-
-The shell history keeps the literal `"$WINDFIRE_TUNNEL_TOKEN"`, never the value. Other runs need no token:
+Every run asks for the token; paste it from the password manager to store or rotate it, press Enter otherwise. Nothing is left in your shell and nothing reaches its history, so there is no `unset` to remember:
 
     ./configure-cloudflare-tunnel.sh --check --diff               # dry run
     ./configure-cloudflare-tunnel.sh                              # install / update, the service is not started
     ./configure-cloudflare-tunnel.sh -e cloudflared_start=true    # enable and (re)start, then wait for /ready
+
+When stdin is not a terminal the script does not prompt; for such runs it still accepts the token from a *WINDFIRE_TUNNEL_TOKEN* variable already in its environment.
 
 **The service is never enabled, started or restarted without `-e cloudflared_start=true`.** With it, the service is restarted if the unit or the credential changed (started otherwise), and the playbook waits until `http://127.0.0.1:20241/ready` answers 200. The metrics and */ready* endpoint listen on 127.0.0.1:*cloudflared_metrics_port* (20241) only, so no UFW rule is needed.
 

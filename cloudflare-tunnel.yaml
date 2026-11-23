@@ -4,10 +4,8 @@
 # it is read only from the WINDFIRE_TUNNEL_TOKEN environment variable on the admin laptop and stored on the Pi only as
 # a systemd-creds encrypted credential (/etc/credstore.encrypted/cloudflared-tunnel-token, root:root 0600).
 # Run with configure-cloudflare-tunnel.sh (extra arguments are passed to ansible-playbook):
-#   read -rs WINDFIRE_TUNNEL_TOKEN                                                 paste from the password manager
-#   WINDFIRE_TUNNEL_TOKEN="$WINDFIRE_TUNNEL_TOKEN" ./configure-cloudflare-tunnel.sh store or rotate the token
-#   unset WINDFIRE_TUNNEL_TOKEN
-#   ./configure-cloudflare-tunnel.sh                                               keep the stored token
+#   ./configure-cloudflare-tunnel.sh                       asks for the token: paste it to store or rotate it,
+#                                                          press Enter to keep the stored one
 #   ./configure-cloudflare-tunnel.sh -e cloudflared_start=true                     also enable, (re)start and check it
 #   ./configure-cloudflare-tunnel.sh --check --diff                                dry run
 # The service is never enabled, started or restarted without -e cloudflared_start=true.
@@ -50,10 +48,7 @@
       fail:
         msg: >-
           {{ cloudflared_credential_path }} does not exist on {{ inventory_hostname }} and WINDFIRE_TUNNEL_TOKEN is not set.
-          Pass the tunnel token once from your password manager:
-          read -rs WINDFIRE_TUNNEL_TOKEN (paste it, then Enter), then
-          WINDFIRE_TUNNEL_TOKEN="$WINDFIRE_TUNNEL_TOKEN" ./configure-cloudflare-tunnel.sh, then
-          unset WINDFIRE_TUNNEL_TOKEN
+          Run ./configure-cloudflare-tunnel.sh and paste the tunnel token from your password manager when asked.
       when:
         - not cloudflared_credential_stat.stat.exists
         - not (cloudflared_token_provided | bool)
