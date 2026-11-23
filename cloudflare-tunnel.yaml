@@ -1,0 +1,318 @@
+--- # Ansible Playbook to run a dashboard-managed Cloudflare Tunnel (cloudflared) on raspberry01
+# Routes and DNS live in the Cloudflare dashboard: there is no /etc/cloudflared/config.yml, no ingress in this
+# repository and no cert.pem anywhere. The tunnel token is never stored in this repository (not even sops-encrypted):
+# it is read only from the WINDFIRE_TUNNEL_TOKEN environment variable on the admin laptop and stored on the Pi only as
+# a systemd-creds encrypted credential (/etc/credstore.encrypted/cloudflared-tunnel-token, root:root 0600).
+# Run with configure-cloudflare-tunnel.sh (extra arguments are passed to ansible-playbook):
+#   read -rs WINDFIRE_TUNNEL_TOKEN                                                 paste from the password manager
+#   WINDFIRE_TUNNEL_TOKEN="$WINDFIRE_TUNNEL_TOKEN" ./configure-cloudflare-tunnel.sh store or rotate the token
+#   unset WINDFIRE_TUNNEL_TOKEN
+#   ./configure-cloudflare-tunnel.sh                                               keep the stored token
+#   ./configure-cloudflare-tunnel.sh -e cloudflared_start=true                     also enable, (re)start and check it
+#   ./configure-cloudflare-tunnel.sh --check --diff                                dry run
+# The service is never enabled, started or restarted without -e cloudflared_start=true.
+- hosts: raspberry01
+  remote_user: "{{ user }}"
+  become: yes
+  tags: [cloudflared]
+  vars:
+    src_dir: "{{ playbook_dir }}"
+    # Module arguments (the token passed on stdin included) go over the SSH connection's stdin instead of an
+    # AnsiballZ temp file under ~/.ansible/tmp on the Pi
+    ansible_pipelining: true
+    cloudflared_credential_path: "/etc/credstore.encrypted/{{ cloudflared_credential }}"
+    cloudflared_unit_path: /etc/systemd/system/cloudflared.service
+    # Only this boolean is used in conditions: the token itself is never set as a fact nor printed
+    cloudflared_token_provided: "{{ lookup('env', 'WINDFIRE_TUNNEL_TOKEN') | length > 0 }}"
+  vars_files:
+    - "{{ src_dir }}/conf/config.yml"
+  tasks:
+    ##############################
+    ##### Pre-flight Section #####
+    ##############################
+    # Kept remote files or Ansible debug output would hold the module arguments, the token included
+    - name: Check Ansible keeps no remote module files and runs without debug output
+      assert:
+        that:
+          - not (lookup('ansible.builtin.config', 'DEFAULT_KEEP_REMOTE_FILES') | bool)
+          - not (lookup('ansible.builtin.config', 'DEFAULT_DEBUG') | bool)
+        fail_msg: "Unset ANSIBLE_KEEP_REMOTE_FILES and ANSIBLE_DEBUG (and keep_remote_files in ansible.cfg) before running this playbook"
+        quiet: true
+      delegate_to: localhost
+      become: false
+      run_once: true
+    - name: Check whether the encrypted tunnel token credential exists
+      stat:
+        path: "{{ cloudflared_credential_path }}"
+      register: cloudflared_credential_stat
+      no_log: true
+    - name: Fail if there is no tunnel token credential yet and WINDFIRE_TUNNEL_TOKEN is not set
+      fail:
+        msg: >-
+          {{ cloudflared_credential_path }} does not exist on {{ inventory_hostname }} and WINDFIRE_TUNNEL_TOKEN is not set.
+          Pass the tunnel token once from your password manager:
+          read -rs WINDFIRE_TUNNEL_TOKEN (paste it, then Enter), then
+          WINDFIRE_TUNNEL_TOKEN="$WINDFIRE_TUNNEL_TOKEN" ./configure-cloudflare-tunnel.sh, then
+          unset WINDFIRE_TUNNEL_TOKEN
+      when:
+        - not cloudflared_credential_stat.stat.exists
+        - not (cloudflared_token_provided | bool)
+    # Dashboard-managed tunnel: a local config.yml or an origin certificate (cert.pem, from 'cloudflared tunnel login')
+    # would mean a locally managed tunnel
+    - name: Check there is no /etc/cloudflared/config.yml
+      stat:
+        path: /etc/cloudflared/config.yml
+      register: cloudflared_local_config
+    - name: Fail if /etc/cloudflared/config.yml exists
+      fail:
+        msg: "/etc/cloudflared/config.yml exists on {{ inventory_hostname }}: this tunnel is managed in the Cloudflare dashboard, remove it"
+      when: cloudflared_local_config.stat.exists
+    - name: Find cloudflared origin certificates (cert.pem)
+      find:
+        paths:
+          - /etc/cloudflared
+          - /usr/local/etc/cloudflared
+          - /root/.cloudflared
+          - /home/pi/.cloudflared
+        patterns: cert.pem
+        hidden: true
+      register: cloudflared_origin_certs
+    - name: Fail if a cloudflared origin certificate exists
+      fail:
+        msg: >-
+          {{ cloudflared_origin_certs.files | map(attribute='path') | join(', ') }} found on {{ inventory_hostname }}:
+          a dashboard-managed tunnel needs no cert.pem, delete it
+      when: cloudflared_origin_certs.files | length > 0
+    ############################################
+    ##### cloudflared installation Section #####
+    ############################################
+    - name: Create apt keyrings directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+    - name: Get Cloudflare apt repository signing key
+      get_url:
+        url: https://pkg.cloudflare.com/cloudflare-public-v2.gpg
+        dest: /etc/apt/keyrings/cloudflare-public-v2.gpg
+        owner: root
+        group: root
+        mode: "0644"
+    # Own the whole file: apt_repository only adds lines, so an old line would stay
+    - name: Set Cloudflare apt repository
+      copy:
+        dest: /etc/apt/sources.list.d/cloudflared.list
+        content: "deb [signed-by=/etc/apt/keyrings/cloudflare-public-v2.gpg] https://pkg.cloudflare.com/cloudflared any main\n"
+        owner: root
+        group: root
+        mode: "0644"
+    - name: Read the installed cloudflared package version
+      command: dpkg-query -W -f=${Version} cloudflared
+      register: cloudflared_dpkg
+      failed_when: false
+      changed_when: false
+      check_mode: false
+    # The repository keeps only the latest build: cloudflared_version is installed on a box without cloudflared,
+    # afterwards unattended-upgrades keeps it current and the playbook only checks cloudflared_min_version (never downgrades)
+    - name: Install cloudflared {{ cloudflared_version }}
+      apt:
+        name: "cloudflared={{ cloudflared_version }}"
+        state: present
+        update_cache: yes
+      when: cloudflared_dpkg.rc != 0 or cloudflared_dpkg.stdout | length == 0
+    - name: Read the cloudflared version
+      command: cloudflared --version
+      register: cloudflared_version_out
+      changed_when: false
+      check_mode: false
+      when: not ansible_check_mode or cloudflared_dpkg.rc == 0
+    - name: Check cloudflared is at least {{ cloudflared_min_version }} (needed for --token-file)
+      assert:
+        that:
+          - cloudflared_version_out.stdout | regex_search('version ([0-9.]+)', '\\1') | first is version(cloudflared_min_version, '>=')
+        fail_msg: >-
+          {{ cloudflared_version_out.stdout }} is older than {{ cloudflared_min_version }} and has no --token-file:
+          the service is not installed (the token is never passed on the command line, in the unit or in an environment file)
+        success_msg: "{{ cloudflared_version_out.stdout }}"
+      when: cloudflared_version_out is not skipped
+    - name: Check cloudflared tunnel run supports --token-file
+      shell: cloudflared tunnel run --help 2>&1 | grep -q -- '--token-file'
+      register: cloudflared_token_file_flag
+      failed_when: false
+      changed_when: false
+      check_mode: false
+      when: cloudflared_version_out is not skipped
+    - name: Fail if cloudflared has no --token-file
+      fail:
+        msg: >-
+          The installed cloudflared has no --token-file option: the service is not installed
+          (the token is never passed on the command line, in the unit or in an environment file)
+      when:
+        - cloudflared_token_file_flag is not skipped
+        - cloudflared_token_file_flag.rc != 0
+    #####################################
+    ##### Automatic updates Section #####
+    #####################################
+    - name: Allow the cloudflared origin in unattended upgrades
+      lineinfile:
+        path: /etc/apt/apt.conf.d/50unattended-upgrades
+        insertafter: '^Unattended-Upgrade::Origins-Pattern \{'
+        line: '        "origin=cloudflared,label=cloudflared";'
+    - name: Check unattended upgrades allowed origins
+      shell: unattended-upgrade --dry-run --debug 2>&1 | grep -i 'allowed origins'
+      register: cloudflared_uu_origins
+      changed_when: false
+      when: not ansible_check_mode
+    - name: Assert the cloudflared origin is allowed
+      assert:
+        that:
+          - "'o=cloudflared,l=cloudflared' in cloudflared_uu_origins.stdout or 'origin=cloudflared,label=cloudflared' in cloudflared_uu_origins.stdout"
+        fail_msg: "Unexpected unattended-upgrades origins: {{ cloudflared_uu_origins.stdout }}"
+        quiet: true
+      when: not ansible_check_mode
+    ################################
+    ##### Service user Section #####
+    ################################
+    - name: Create the cloudflared system group
+      group:
+        name: cloudflared
+        system: yes
+    - name: Create the cloudflared system user (no shell, no home, no other groups)
+      user:
+        name: cloudflared
+        group: cloudflared
+        groups: []
+        append: no
+        system: yes
+        shell: /usr/sbin/nologin
+        home: /nonexistent
+        create_home: no
+    - name: Read the sudo rights of the cloudflared user
+      command: sudo -l -U cloudflared
+      register: cloudflared_sudo
+      changed_when: false
+      when: not ansible_check_mode
+    - name: Assert the cloudflared user cannot use sudo
+      assert:
+        that:
+          - "'not allowed' in cloudflared_sudo.stdout"
+        fail_msg: "The cloudflared user has sudo rights: {{ cloudflared_sudo.stdout }}"
+        quiet: true
+      when: not ansible_check_mode
+    ###########################################
+    ##### Tunnel token credential Section #####
+    ###########################################
+    # The token is passed only on stdin to systemd-creds (never in argv, a temp file or the logs); the plaintext is
+    # never written to disk on the Pi. Without WINDFIRE_TUNNEL_TOKEN an existing credential is left untouched.
+    - name: Ensure /etc/credstore.encrypted directory exists
+      file:
+        path: /etc/credstore.encrypted
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      no_log: true
+    - name: Encrypt the tunnel token with systemd-creds
+      command:
+        cmd: "systemd-creds encrypt --name=tunnel-token - {{ cloudflared_credential_path }}"
+        stdin: "{{ lookup('env', 'WINDFIRE_TUNNEL_TOKEN') }}"
+        stdin_add_newline: false
+      register: cloudflared_credential_encrypt
+      when: cloudflared_token_provided | bool
+      no_log: true
+    - name: Set the tunnel token credential to root:root 0600
+      file:
+        path: "{{ cloudflared_credential_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      when: cloudflared_credential_stat.stat.exists or (cloudflared_credential_encrypt is changed)
+      no_log: true
+    - name: Report that the existing tunnel token credential was kept
+      debug:
+        msg: "WINDFIRE_TUNNEL_TOKEN not set: kept the existing {{ cloudflared_credential_path }}"
+      when: not (cloudflared_token_provided | bool)
+    ################################
+    ##### systemd unit Section #####
+    ################################
+    # 'cloudflared service install' writes its own unit with the token in ExecStart, plus an update timer:
+    # this unit replaces it and the update units are removed (updates come from apt)
+    - name: Check whether the cloudflared-update timer exists
+      stat:
+        path: /etc/systemd/system/cloudflared-update.timer
+      register: cloudflared_update_timer
+    - name: Stop and disable the cloudflared-update timer
+      systemd:
+        name: cloudflared-update.timer
+        state: stopped
+        enabled: no
+      when: cloudflared_update_timer.stat.exists
+    - name: Remove the cloudflared-update units
+      file:
+        path: "/etc/systemd/system/{{ item }}"
+        state: absent
+      loop:
+        - cloudflared-update.service
+        - cloudflared-update.timer
+    - name: Check whether the existing cloudflared unit holds a token in ExecStart
+      # rc 0: token found; 1: not found; 2: no unit yet
+      command: grep -q -e '--token ' {{ cloudflared_unit_path }}
+      register: cloudflared_unit_token
+      failed_when: false
+      changed_when: false
+      check_mode: false
+      no_log: true
+    - name: Warn that the previous cloudflared unit held the tunnel token
+      debug:
+        msg: >-
+          WARNING: {{ cloudflared_unit_path }} held a tunnel token on its command line (a world-readable unit written by
+          'cloudflared service install'). It is replaced now: rotate the tunnel token in the Cloudflare dashboard and store
+          the new one with WINDFIRE_TUNNEL_TOKEN.
+      when: cloudflared_unit_token.rc == 0
+    # diff: false, so --diff never prints a previous unit that held a token
+    - name: Install the cloudflared systemd unit
+      template:
+        src: "{{ src_dir }}/templates/cloudflared.service.j2"
+        dest: "{{ cloudflared_unit_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+      diff: false
+      register: cloudflared_unit
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+      when: cloudflared_unit is changed
+    ###############################################################
+    ##### Start Section (only with -e cloudflared_start=true) #####
+    ###############################################################
+    - name: Enable and (re)start cloudflared
+      systemd:
+        name: cloudflared
+        enabled: yes
+        state: "{{ 'restarted' if (cloudflared_unit is changed or cloudflared_credential_encrypt is changed) else 'started' }}"
+      when: cloudflared_start | bool
+    - name: Wait for cloudflared to be connected to Cloudflare (/ready on the metrics port)
+      uri:
+        url: "http://127.0.0.1:{{ cloudflared_metrics_port }}/ready"
+        status_code: 200
+      register: cloudflared_ready
+      until: cloudflared_ready.status == 200
+      retries: 12
+      delay: 5
+      when:
+        - cloudflared_start | bool
+        - not ansible_check_mode
+    - name: Read the cloudflared service state
+      command: systemctl is-active cloudflared
+      register: cloudflared_active
+      failed_when: false
+      changed_when: false
+      check_mode: false
+      when: not (cloudflared_start | bool)
+    - name: Report the cloudflared service state
+      debug:
+        msg: >-
+          cloudflared is {{ cloudflared_active.stdout }}; it was not enabled, started or restarted.
+          Pass -e cloudflared_start=true to enable and (re)start it with the current unit and credential.
+      when: not (cloudflared_start | bool)
