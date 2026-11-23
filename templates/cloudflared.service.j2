@@ -1,0 +1,46 @@
+# Managed by Ansible (windfire-raspberry cloudflare-tunnel.yaml): do not edit by hand.
+# This is not the unit 'cloudflared service install' writes: the tunnel token is never in this file, on the command
+# line or in an environment variable. It is loaded from the systemd-creds encrypted credential
+# /etc/credstore.encrypted/{{ cloudflared_credential }} into $CREDENTIALS_DIRECTORY, readable only by this unit.
+# Routes and DNS of this dashboard-managed tunnel are in the Cloudflare dashboard (no config.yml, no cert.pem).
+[Unit]
+Description=Cloudflare Tunnel (dashboard-managed)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cloudflared
+Group=cloudflared
+LoadCredentialEncrypted=tunnel-token:/etc/credstore.encrypted/{{ cloudflared_credential }}
+ExecStart=/usr/bin/cloudflared --no-autoupdate --metrics 127.0.0.1:{{ cloudflared_metrics_port }} tunnel run --token-file ${CREDENTIALS_DIRECTORY}/tunnel-token
+Restart=on-failure
+RestartSec=5
+# Logs go to the journal (shipped by Alloy: cloudflared.service is in alloy_journal_units)
+# Sandbox, as the Windfire app units: the whole filesystem is read-only to the service (ProtectSystem=strict) and
+# /home is hidden (ProtectHome=yes: nothing of cloudflared lives there).
+# MemoryDenyWriteExecute is safe here: cloudflared is a Go binary, no JIT.
+# AF_NETLINK: Go reads the network interfaces through netlink.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
