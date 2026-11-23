@@ -6,7 +6,10 @@
 #   ./configure-windfire-infra.sh --tags windfire_ca                                    install or rotate the CA certificates
 #   ./configure-windfire-infra.sh --tags windfire_ca -e windfire_ca_remove_legacy=true  also delete the old CA copies
 # Tags: ufw, windfire_ca, java
-source setenv.sh
+# Run from this script's folder, so ./setenv.sh and ansible.cfg are always this repo's. A bare
+# "source setenv.sh" searches $PATH first and can load another project's setenv.sh.
+cd "$(dirname "$0")" || exit 1
+source ./setenv.sh
 
 ANSIBLE_PLAYBOOK="raspberry-configure-windfire-infra.yaml"
 
