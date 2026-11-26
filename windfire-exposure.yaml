@@ -1,0 +1,421 @@
+--- # Ansible Playbook to switch Windfire between public access (Cloudflare Tunnel) and LAN-only access, one step at a time
+# Run it through switch-windfire-exposure.sh, which also runs the Keycloak and UI deploys of the sibling repositories
+# between the steps. Every step is idempotent, so a failed switch is resumed by running the script again.
+#
+#   -e windfire_exposure=lan|public   target mode (not needed for the status step)
+#   -e windfire_exposure_step=...     prepare | tunnel | status
+#
+# prepare  lan: stop and disable cloudflared first (the tunnel token credential is kept, unless
+#               -e windfire_forget_tunnel_token=true), so nothing is reachable from the internet any more
+#          both: write the mode to /etc/ansible/facts.d/windfire.fact on raspberry01 and raspberry02. Every
+#               Windfire deploy playbook reads it (ansible_local.windfire.exposure), so a later deploy keeps the
+#               mode instead of putting the other issuer back. No file means public
+#          both: set KEYCLOAK_ISSUER_URL of windfire-security (raspberry01) and windfire-restaurants-backend
+#               (raspberry02), restart them and wait until they are healthy
+# tunnel   public only: enable and start cloudflared, then wait until it is connected (nothing to do for lan)
+# status   read-only: report every component's mode and print LAN, PUBLIC or MIXED. It fails on MIXED, and also
+#          when -e windfire_exposure=... is given and the result is not that mode
+#
+# Nothing on Cloudflare's side is changed: the tunnel, its routes, the DNS records and the Access applications stay,
+# so going public again needs no dashboard work. The Keycloak UI client keeps its https://app.<domain> entries.
+- name: Check the arguments
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  tags: [always]
+  vars_files:
+    - "{{ playbook_dir }}/conf/config.yml"
+  tasks:
+    - name: Check the step and the target mode
+      ansible.builtin.assert:
+        that:
+          - windfire_exposure_step | default('') in ['prepare', 'tunnel', 'status']
+          - (windfire_exposure_step | default('')) == 'status' or (windfire_exposure | default('')) in ['lan', 'public']
+          - (windfire_exposure | default('lan')) in ['lan', 'public']
+        fail_msg: >-
+          Run ./switch-windfire-exposure.sh lan|public|status (needs -e windfire_exposure_step=prepare|tunnel|status
+          and, except for status, -e windfire_exposure=lan|public)
+        quiet: true
+
+##########################################
+##### prepare (lan): stop the tunnel #####
+##########################################
+- name: Prepare, lan - stop the Cloudflare Tunnel
+  hosts: raspberry01
+  remote_user: "{{ user }}"
+  become: true
+  gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/conf/config.yml"
+  vars:
+    cloudflared_credential_path: "/etc/credstore.encrypted/{{ cloudflared_credential }}"
+  tasks:
+    - name: Stop the Cloudflare Tunnel
+      when: windfire_exposure_step == 'prepare' and windfire_exposure == 'lan'
+      block:
+        - name: Read the systemd services
+          ansible.builtin.service_facts:
+
+        - name: Stop and disable cloudflared (it stays installed, so going public again is one start)
+          ansible.builtin.systemd:
+            name: cloudflared
+            state: stopped
+            enabled: false
+          when: "'cloudflared.service' in ansible_facts.services"
+
+        - name: Delete the tunnel token credential (-e windfire_forget_tunnel_token=true)
+          ansible.builtin.command: shred -u {{ cloudflared_credential_path }}
+          args:
+            removes: "{{ cloudflared_credential_path }}"
+          when: windfire_forget_tunnel_token | default(false) | bool
+
+        - name: Report the tunnel state
+          ansible.builtin.debug:
+            msg:
+              - >-
+                {{ 'cloudflared stopped and disabled' if 'cloudflared.service' in ansible_facts.services
+                else 'cloudflared is not installed: nothing to stop' }}
+              - >-
+                {{ 'Tunnel token credential deleted: going public again needs ./configure-cloudflare-tunnel.sh and the token'
+                ~ ' from the password manager' if windfire_forget_tunnel_token | default(false) | bool
+                else 'Tunnel token credential kept (' ~ cloudflared_credential_path ~ ', encrypted, root only):'
+                ~ ' going public again needs no token' }}
+
+############################################
+##### prepare: record the mode on both #####
+############################################
+- name: Prepare - record the mode on both Pis
+  hosts: raspberry01,raspberry02
+  remote_user: "{{ user }}"
+  become: true
+  gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/conf/config.yml"
+  tasks:
+    - name: Record the exposure mode
+      when: windfire_exposure_step == 'prepare'
+      block:
+        - name: Create {{ windfire_exposure_fact_dir }} (root:root 0755)
+          ansible.builtin.file:
+            path: "{{ windfire_exposure_fact_dir }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        # Not executable: Ansible runs executable .fact files instead of reading them
+        - name: Write the mode to {{ windfire_exposure_fact_dir }}/windfire.fact (ansible_local.windfire.exposure)
+          ansible.builtin.copy:
+            dest: "{{ windfire_exposure_fact_dir }}/windfire.fact"
+            content: "{{ {'exposure': windfire_exposure} | to_nice_json }}\n"
+            owner: root
+            group: root
+            mode: "0644"
+
+###################################################
+##### prepare: windfire-security (raspberry01) #####
+###################################################
+- name: Prepare - windfire-security issuer
+  hosts: raspberry01
+  remote_user: "{{ user }}"
+  become: true
+  gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/conf/config.yml"
+  vars:
+    issuer_url: "{{ windfire_public_keycloak_url if windfire_exposure | default('') == 'public' else windfire_internal_keycloak_url }}"
+  tasks:
+    - name: Switch the windfire-security token issuer
+      when: windfire_exposure_step == 'prepare'
+      block:
+        - name: Check {{ windfire_security_env_file }} exists
+          ansible.builtin.stat:
+            path: "{{ windfire_security_env_file }}"
+          register: security_env
+
+        - name: Fail if windfire-security is not deployed
+          ansible.builtin.fail:
+            msg: "{{ windfire_security_env_file }} not found: deploy windfire-security first (deployment/deploy.sh)"
+          when: not security_env.stat.exists
+
+        # lineinfile keeps the file's owner (windfire-security) and mode
+        - name: Set KEYCLOAK_ISSUER_URL={{ issuer_url }}
+          ansible.builtin.lineinfile:
+            path: "{{ windfire_security_env_file }}"
+            regexp: '^KEYCLOAK_ISSUER_URL='
+            line: "KEYCLOAK_ISSUER_URL={{ issuer_url }}"
+          register: security_issuer
+
+        # Always, not only when the line changed: a rerun after a failed restart must still restart it
+        - name: Restart {{ windfire_security_service }}
+          ansible.builtin.systemd:
+            name: "{{ windfire_security_service }}"
+            state: restarted
+
+        - name: Wait until windfire-security is healthy
+          ansible.builtin.uri:
+            url: "{{ windfire_security_health_url }}"
+            ca_path: "{{ windfire_ca_dir }}/WindfireRootCA.crt"
+          register: security_health
+          until: security_health.status == 200
+          retries: 12
+          delay: 5
+
+#############################################################
+##### prepare: windfire-restaurants-backend (raspberry02) #####
+#############################################################
+- name: Prepare - windfire-restaurants-backend issuer
+  hosts: raspberry02
+  remote_user: "{{ user }}"
+  become: true
+  gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/conf/config.yml"
+  vars:
+    issuer_url: "{{ windfire_public_keycloak_url if windfire_exposure | default('') == 'public' else windfire_internal_keycloak_url }}"
+  tasks:
+    - name: Switch the windfire-restaurants-backend token issuer
+      when: windfire_exposure_step == 'prepare'
+      block:
+        - name: Check {{ windfire_restaurants_env_file }} exists
+          ansible.builtin.stat:
+            path: "{{ windfire_restaurants_env_file }}"
+          register: restaurants_env
+
+        - name: Fail if windfire-restaurants-backend is not deployed
+          ansible.builtin.fail:
+            msg: "{{ windfire_restaurants_env_file }} not found: deploy windfire-restaurants-backend first (deploy.sh)"
+          when: not restaurants_env.stat.exists
+
+        - name: Set KEYCLOAK_ISSUER_URL={{ issuer_url }}
+          ansible.builtin.lineinfile:
+            path: "{{ windfire_restaurants_env_file }}"
+            regexp: '^KEYCLOAK_ISSUER_URL='
+            line: "KEYCLOAK_ISSUER_URL={{ issuer_url }}"
+          register: restaurants_issuer
+
+        # Always, not only when the line changed: a rerun after a failed restart must still restart it
+        - name: Restart {{ windfire_restaurants_service }}
+          ansible.builtin.systemd:
+            name: "{{ windfire_restaurants_service }}"
+            state: restarted
+
+        # A Pi 3 cold start takes ~40 s
+        - name: Wait until windfire-restaurants-backend is healthy
+          ansible.builtin.uri:
+            url: "{{ windfire_restaurants_health_url }}"
+            ca_path: "{{ windfire_ca_dir }}/WindfireRootCA.crt"
+          register: restaurants_health
+          until: restaurants_health.status == 200
+          retries: 36
+          delay: 5
+
+########################################
+##### tunnel (public): start it #####
+########################################
+- name: Tunnel, public - start the Cloudflare Tunnel
+  hosts: raspberry01
+  remote_user: "{{ user }}"
+  become: true
+  gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/conf/config.yml"
+  vars:
+    cloudflared_credential_path: "/etc/credstore.encrypted/{{ cloudflared_credential }}"
+    cloudflared_unit_path: /etc/systemd/system/cloudflared.service
+  tasks:
+    - name: Start the Cloudflare Tunnel
+      when: windfire_exposure_step == 'tunnel' and windfire_exposure == 'public'
+      block:
+        - name: Read the systemd services
+          ansible.builtin.service_facts:
+
+        - name: Check the tunnel token credential
+          ansible.builtin.stat:
+            path: "{{ cloudflared_credential_path }}"
+          register: tunnel_credential
+
+        # rc only: the token itself is never read into a variable
+        - name: Check whether the cloudflared unit holds the token on its command line
+          ansible.builtin.command: grep -qE -- '--token([= ]|$)' {{ cloudflared_unit_path }}
+          register: token_in_unit
+          changed_when: false
+          failed_when: false
+
+        - name: Fail if cloudflared or its token is missing
+          ansible.builtin.fail:
+            msg: >-
+              {{ 'cloudflared is not installed' if 'cloudflared.service' not in ansible_facts.services
+              else 'the tunnel token credential is missing' }} on raspberry01: run ./configure-cloudflare-tunnel.sh
+              -e cloudflared_start=true and paste the token from the password manager, then run
+              ./switch-windfire-exposure.sh status
+          when: >-
+            'cloudflared.service' not in ansible_facts.services
+            or (not tunnel_credential.stat.exists and token_in_unit.rc != 0)
+
+        - name: Enable and start cloudflared
+          ansible.builtin.systemd:
+            name: cloudflared
+            state: started
+            enabled: true
+
+        - name: Wait for cloudflared to be connected to Cloudflare (/ready on the metrics port)
+          ansible.builtin.uri:
+            url: "http://127.0.0.1:{{ cloudflared_metrics_port }}/ready"
+          register: cloudflared_ready
+          until: cloudflared_ready.status == 200
+          retries: 12
+          delay: 5
+          when: token_in_unit.rc != 0
+
+        - name: Warn that the token is on the cloudflared command line
+          ansible.builtin.debug:
+            msg: >-
+              WARNING: the cloudflared unit was written by 'cloudflared service install' and holds the tunnel token on
+              its command line (world-readable unit file, visible in ps). Run ./configure-cloudflare-tunnel.sh once with
+              the token: it moves it into an encrypted credential and installs the sandboxed unit. Rotate the token
+              afterwards (Networking > Tunnels > windfire > Refresh token).
+          when: token_in_unit.rc == 0
+
+#########################################
+##### status: read-only, every part #####
+#########################################
+- name: Status - report every component
+  hosts: raspberry01
+  remote_user: "{{ user }}"
+  become: true
+  gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/conf/config.yml"
+  vars:
+    cloudflared_credential_path: "/etc/credstore.encrypted/{{ cloudflared_credential }}"
+    cloudflared_unit_path: /etc/systemd/system/cloudflared.service
+    realm_issuer_lan: "{{ windfire_internal_keycloak_url }}/realms/{{ windfire_keycloak_realm }}"
+    realm_issuer_public: "{{ windfire_public_keycloak_url }}/realms/{{ windfire_keycloak_realm }}"
+  tasks:
+    - name: Report the exposure mode
+      when: windfire_exposure_step == 'status'
+      block:
+        - name: Read the systemd services
+          ansible.builtin.service_facts:
+
+        - name: Read the recorded mode on raspberry01 and raspberry02
+          ansible.builtin.command: cat {{ windfire_exposure_fact_dir }}/windfire.fact
+          delegate_to: "{{ item }}"
+          loop: [raspberry01, raspberry02]
+          register: recorded_mode
+          changed_when: false
+          failed_when: false
+
+        - name: Read the tunnel token credential
+          ansible.builtin.stat:
+            path: "{{ cloudflared_credential_path }}"
+          register: tunnel_credential
+
+        - name: Check whether the cloudflared unit holds the token on its command line
+          ansible.builtin.command: grep -qE -- '--token([= ]|$)' {{ cloudflared_unit_path }}
+          register: token_in_unit
+          changed_when: false
+          failed_when: false
+
+        - name: Read hostname= in {{ windfire_keycloak_conf }}
+          ansible.builtin.command: sed -n 's/^hostname=//p' {{ windfire_keycloak_conf }}  # noqa: command-instead-of-module
+          register: keycloak_hostname
+          changed_when: false
+          failed_when: false
+
+        - name: Read the {{ windfire_keycloak_realm }} realm issuer over the LAN
+          ansible.builtin.uri:
+            url: "{{ realm_issuer_lan }}/.well-known/openid-configuration"
+            ca_path: "{{ windfire_ca_dir }}/WindfireKeycloakRootCA.crt"
+            return_content: true
+          register: realm_discovery
+          failed_when: false
+
+        - name: Read KEYCLOAK_ISSUER_URL of windfire-security
+          ansible.builtin.command: sed -n 's/^KEYCLOAK_ISSUER_URL=//p' {{ windfire_security_env_file }}  # noqa: command-instead-of-module
+          register: security_issuer
+          changed_when: false
+          failed_when: false
+
+        - name: Read KEYCLOAK_ISSUER_URL of windfire-restaurants-backend (raspberry02)
+          ansible.builtin.command: sed -n 's/^KEYCLOAK_ISSUER_URL=//p' {{ windfire_restaurants_env_file }}  # noqa: command-instead-of-module
+          delegate_to: raspberry02
+          register: restaurants_issuer
+          changed_when: false
+          failed_when: false
+
+        - name: Read VITE_KEYCLOAK_URL of windfire-ui-react
+          ansible.builtin.command: sed -n 's/^VITE_KEYCLOAK_URL=//p' {{ windfire_ui_env_file }}  # noqa: command-instead-of-module
+          register: ui_keycloak_url
+          changed_when: false
+          failed_when: false
+
+        - name: Work out the mode of each component
+          ansible.builtin.set_fact:
+            exposure_rows: >-
+              {{ [
+                {'name': 'recorded mode on raspberry01', 'value': mode01, 'mode': mode01},
+                {'name': 'recorded mode on raspberry02', 'value': mode02, 'mode': mode02},
+                {'name': 'cloudflared', 'value': tunnel_value, 'mode': tunnel_mode},
+                {'name': 'Keycloak hostname=', 'value': kc_hostname, 'mode': url_modes[kc_hostname] | default('unknown')},
+                {'name': windfire_keycloak_realm ~ ' realm issuer', 'value': realm_issuer,
+                 'mode': 'public' if realm_issuer == realm_issuer_public else ('lan' if realm_issuer == realm_issuer_lan else 'unknown')},
+                {'name': 'windfire-security KEYCLOAK_ISSUER_URL', 'value': sec_issuer, 'mode': url_modes[sec_issuer] | default('unknown')},
+                {'name': 'windfire-restaurants-backend KEYCLOAK_ISSUER_URL', 'value': rest_issuer, 'mode': url_modes[rest_issuer] | default('unknown')},
+                {'name': 'windfire-ui-react VITE_KEYCLOAK_URL', 'value': ui_url, 'mode': url_modes[ui_url] | default('unknown')}
+              ] }}
+          vars:
+            # No fact file = public (the state before the switch existed)
+            mode01: "{{ (recorded_mode.results[0].stdout | from_json).exposure | default('public') if recorded_mode.results[0].rc == 0 else 'public' }}"
+            mode02: "{{ (recorded_mode.results[1].stdout | from_json).exposure | default('public') if recorded_mode.results[1].rc == 0 else 'public' }}"
+            cloudflared_service: "{{ ansible_facts.services['cloudflared.service'] | default({}) }}"
+            tunnel_mode: "{{ 'public' if cloudflared_service.state | default('') == 'running' else 'lan' }}"
+            tunnel_value: >-
+              {{ 'not installed' if cloudflared_service == {} else
+                 (cloudflared_service.state ~ ', ' ~ cloudflared_service.status ~ ', token ' ~
+                  ('on the command line' if token_in_unit.rc == 0 else ('in the encrypted credential' if tunnel_credential.stat.exists else 'missing'))) }}
+            kc_hostname: "{{ keycloak_hostname.stdout | default('') | trim }}"
+            realm_issuer: "{{ realm_discovery.json.issuer | default('not readable (status ' ~ realm_discovery.status | default('?') ~ ')') }}"
+            sec_issuer: "{{ security_issuer.stdout | default('') | trim or 'not found' }}"
+            rest_issuer: "{{ restaurants_issuer.stdout | default('') | trim or 'not found' }}"
+            ui_url: "{{ ui_keycloak_url.stdout | default('') | trim or 'not found' }}"
+            url_modes: "{{ {windfire_public_keycloak_url: 'public', windfire_internal_keycloak_url: 'lan'} }}"
+
+        - name: Work out the overall mode
+          ansible.builtin.set_fact:
+            exposure_modes: "{{ exposure_rows | map(attribute='mode') | unique | list }}"
+            exposure_verdict: >-
+              {{ (exposure_rows | map(attribute='mode') | unique | first | upper)
+                 if (exposure_rows | map(attribute='mode') | unique | list | length) == 1 else 'MIXED' }}
+
+        - name: Report the exposure mode
+          ansible.builtin.debug:
+            msg: "Windfire exposure: {{ exposure_verdict }}"
+
+        - name: Report each component (mode, value)
+          ansible.builtin.debug:
+            msg: "{{ item.mode | upper }}: {{ item.value }}"
+          loop: "{{ exposure_rows }}"
+          loop_control:
+            label: "{{ item.name }}"
+
+        - name: Warn that the token is on the cloudflared command line
+          ansible.builtin.debug:
+            msg: >-
+              WARNING: the cloudflared unit holds the tunnel token on its command line (written by 'cloudflared service
+              install'). Run ./configure-cloudflare-tunnel.sh once with the token to move it into an encrypted
+              credential, then rotate it.
+          when: token_in_unit.rc == 0
+
+        - name: Fail if the components disagree, or do not match the requested mode
+          ansible.builtin.fail:
+            msg: >-
+              Windfire is {{ exposure_verdict }}{{ '' if windfire_exposure is not defined else ', not ' ~ windfire_exposure | upper }}:
+              the rows above show each component's mode (UNKNOWN = not readable or an unexpected value). If a switch was
+              interrupted, run ./switch-windfire-exposure.sh {{ windfire_exposure | default('lan|public') }} again
+              (every step is idempotent)
+          when: >-
+            exposure_verdict == 'MIXED'
+            or (windfire_exposure is defined and exposure_verdict != windfire_exposure | upper)

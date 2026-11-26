@@ -71,3 +71,22 @@ cloudflared_metrics_port: 20241
 cloudflared_credential: cloudflared-tunnel-token
 # true (-e cloudflared_start=true): enable and (re)start cloudflared; false: never enable, start or restart it
 cloudflared_start: false
+# Switch between public access through the Cloudflare Tunnel and LAN-only access
+# (windfire-exposure.yaml, ./switch-windfire-exposure.sh lan|public|status). The two Keycloak base URLs as they appear
+# in the token issuer: the public hostname behind the tunnel, and raspberry01 on the LAN. They must match
+# keycloak_public_url / keycloak_internal_url in windfire-security and the UI's deployment profiles.
+windfire_public_keycloak_url: "https://auth.windfire.cc"
+windfire_internal_keycloak_url: "https://raspberry01:8443"
+windfire_keycloak_realm: windfire
+windfire_keycloak_conf: /etc/keycloak/keycloak.conf
+# The mode is recorded on both Pis as an Ansible local fact (ansible_local.windfire.exposure): every Windfire deploy
+# playbook reads it, so a later deploy keeps the current mode. No file means public.
+windfire_exposure_fact_dir: /etc/ansible/facts.d
+# Files and services the switch changes, as deployed by each Windfire repository
+windfire_security_env_file: /home/pi/windfire-security/server/.env
+windfire_security_service: windfire-security
+windfire_security_health_url: https://raspberry01:8444/v1/monitor/health
+windfire_restaurants_env_file: /home/pi/windfire-restaurants/windfire-restaurants-backend.env
+windfire_restaurants_service: windfire-restaurants-backend
+windfire_restaurants_health_url: https://raspberry02:8081/actuator/health
+windfire_ui_env_file: /home/pi/windfire-ui-react/.env
