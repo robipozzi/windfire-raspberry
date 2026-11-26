@@ -262,6 +262,32 @@ The unit is not the one `cloudflared service install` writes (that one puts the 
 
 Check it on the Pi with `systemctl status cloudflared`, `journalctl -u cloudflared` and `curl -s 127.0.0.1:20241/ready`.
 
+### Switch between public and LAN-only access
+**[switch-windfire-exposure.sh](switch-windfire-exposure.sh)** moves Windfire between public access through the Cloudflare Tunnel (`https://app.windfire.cc`, Keycloak issuer `https://auth.windfire.cc`) and LAN-only access from the home network (`https://raspberry01:8445`, issuer `https://raspberry01:8443`), and reports which mode it is in. It never changes anything on Cloudflare's side (tunnel, routes, DNS records, Access applications stay), and the Keycloak UI client keeps its `https://app.windfire.cc` entries, so neither direction needs dashboard or console work.
+
+    ./switch-windfire-exposure.sh status                  # read-only: LAN, PUBLIC or MIXED (exit 1 on MIXED)
+    ./switch-windfire-exposure.sh lan                     # rollback to on-prem only
+    ./switch-windfire-exposure.sh lan --forget-token      # also shred the encrypted tunnel token on raspberry01
+    ./switch-windfire-exposure.sh public                  # back to public access
+
+It runs these steps, each idempotent, so an interrupted switch is finished by running the same command again:
+
+| Step | lan | public |
+|---|---|---|
+| 1. [windfire-exposure.yaml](windfire-exposure.yaml) `prepare` | stop and disable cloudflared first; record the mode; set `KEYCLOAK_ISSUER_URL` of windfire-security and windfire-restaurants-backend, restart them, wait until healthy | record the mode; set the issuers, restart, wait until healthy |
+| 2. windfire-security `keycloak/deployment/deploy-keycloak-tls.sh -e keycloak_public_url=...` | `https://raspberry01:8443` (removes the proxy options) | `https://auth.windfire.cc` (may ask for the master admin credentials and an OTP code) |
+| 3. windfire-ui-react `deployment/deploy.sh 1 --profile ...` | `lan` | `public` |
+| 4. `windfire-exposure.yaml` `tunnel` | (nothing) | enable and start cloudflared last, wait for `/ready` |
+| 5. `windfire-exposure.yaml` `status` | must print LAN | must print PUBLIC |
+
+Every step asks for the pi sudo password. The UI step asks its usual questions: press Enter to keep the profile's defaults. Nobody can sign in while the switch runs, and everyone signs in again afterwards, because existing tokens carry the other issuer.
+
+**The mode is recorded on both Pis** as an Ansible local fact, `/etc/ansible/facts.d/windfire.fact` (`{"exposure": "lan"}`, root:root 0644; no file means public). The deploy playbooks of windfire-security (auth server and Keycloak), windfire-restaurants-backend and windfire-ui-react read it as `ansible_local.windfire.exposure`, so a regular deploy made while Windfire is LAN-only keeps the LAN issuer instead of putting the public one back. The script warns when a sibling repository does not read it yet.
+
+**The tunnel token** stays in its encrypted credential when you switch to lan (root only, decrypted only into the unit's private credentials directory), so going public again needs no token. With `--forget-token` it is shredded; then run `./configure-cloudflare-tunnel.sh -e cloudflared_start=true` with the token from the password manager before `./switch-windfire-exposure.sh public`. If raspberry01 may have been compromised while it was LAN-only, refresh the token in the dashboard first (Networking > Tunnels > windfire). `status` and the `tunnel` step warn if the cloudflared unit still holds the token on its command line (a unit written by `cloudflared service install`): run `./configure-cloudflare-tunnel.sh` once to move it into the credential, then rotate it.
+
+The sibling repositories are expected next to this one (`../windfire-security`, `../windfire-ui-react`); set *WINDFIRE_SECURITY_DIR* / *WINDFIRE_UI_DIR* otherwise. The URLs, files, services and health checks the switch uses are the `windfire_*` settings at the end of *[config.yml](conf/config.yml)*.
+
 ### Basic web infrastructure installation automation task
 A very basic infrastructure to run web applications can be made of two major components:
 
