@@ -2,8 +2,7 @@ user: pi
 group: pi
 # Fixed by DHCP reservations on the home router: ufw rules depend on them
 admin_ip: 192.168.1.27
-# raspberry02_ip and pi_core_ip are used by ufw_rules below;
-# raspberry01_ip is not used by a rule yet, it is recorded for rules that will be set in the future
+# raspberry01_ip, raspberry02_ip and pi_core_ip are used by ufw_rules below
 raspberry01_ip: 192.168.1.18
 raspberry02_ip: 192.168.1.2
 pi_core_ip: 192.168.1.10
@@ -33,6 +32,7 @@ alloy_journal_units:
   - windfire-ui-react.service
   - ssh.service
   - unattended-upgrades.service
+  - cloudflared.service
 # UFW allow rules per host, ensured by raspberry-configure-windfire-infra.yaml (never reset).
 # Each rule: port, proto (tcp | udp | any), from (an IP or 'any'), comment.
 # The SSH rule from admin_ip is set by raspberry.yaml too: keep it identical here.
@@ -53,7 +53,40 @@ ufw_rules:
     - { port: '22',   proto: tcp, from: "{{ admin_ip }}",       comment: SSH from admin laptop }
     - { port: '8081', proto: tcp, from: "{{ admin_ip }}",       comment: Windfire Restaurants Backend }
     - { port: '8443', proto: tcp, from: "{{ admin_ip }}",       comment: Windfire Calendar }
+    - { port: '8081', proto: tcp, from: "{{ raspberry01_ip }}", comment: cloudflared -> Windfire Restaurants Backend }
     # windfire-maps: no rule left on the Pi, so none is listed here
 # true: delete the UFW rules that are not in ufw_rules (the SSH rule from admin_ip is always kept).
 # Override per run with -e ufw_prune_unlisted=true
 ufw_prune_unlisted: false
+# Cloudflare Tunnel (cloudflare-tunnel.yaml, ./configure-cloudflare-tunnel.sh) on raspberry01, managed in the
+# Cloudflare dashboard. The tunnel token is never stored in this repository: see the README.
+# cloudflared_version is installed on a box without cloudflared (Cloudflare's apt repository keeps only the latest
+# build: update it when it is gone); afterwards unattended-upgrades keeps cloudflared current and the playbook only
+# checks it is at least cloudflared_min_version (the first release with --token-file), it never downgrades.
+cloudflared_version: "2026.11.2"
+cloudflared_min_version: "2025.4.0"
+# Metrics and /ready on 127.0.0.1 only: no UFW rule
+cloudflared_metrics_port: 20241
+# systemd-creds encrypted tunnel token: /etc/credstore.encrypted/<cloudflared_credential>
+cloudflared_credential: cloudflared-tunnel-token
+# true (-e cloudflared_start=true): enable and (re)start cloudflared; false: never enable, start or restart it
+cloudflared_start: false
+# Switch between public access through the Cloudflare Tunnel and LAN-only access
+# (windfire-exposure.yaml, ./switch-windfire-exposure.sh lan|public|status). The two Keycloak base URLs as they appear
+# in the token issuer: the public hostname behind the tunnel, and raspberry01 on the LAN. They must match
+# keycloak_public_url / keycloak_internal_url in windfire-security and the UI's deployment profiles.
+windfire_public_keycloak_url: "https://auth.windfire.cc"
+windfire_internal_keycloak_url: "https://raspberry01:8443"
+windfire_keycloak_realm: windfire
+windfire_keycloak_conf: /etc/keycloak/keycloak.conf
+# The mode is recorded on both Pis as an Ansible local fact (ansible_local.windfire.exposure): every Windfire deploy
+# playbook reads it, so a later deploy keeps the current mode. No file means public.
+windfire_exposure_fact_dir: /etc/ansible/facts.d
+# Files and services the switch changes, as deployed by each Windfire repository
+windfire_security_env_file: /home/pi/windfire-security/server/.env
+windfire_security_service: windfire-security
+windfire_security_health_url: https://raspberry01:8444/v1/monitor/health
+windfire_restaurants_env_file: /home/pi/windfire-restaurants/windfire-restaurants-backend.env
+windfire_restaurants_service: windfire-restaurants-backend
+windfire_restaurants_health_url: https://raspberry02:8081/actuator/health
+windfire_ui_env_file: /home/pi/windfire-ui-react/.env

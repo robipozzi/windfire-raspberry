@@ -7,6 +7,7 @@
     - [Grafana Cloud configuration](#Grafana-Cloud-configuration)
     - [Windfire infrastructure configuration automation task](#Windfire-infrastructure-configuration-automation-task)
         - [UFW rules as code](#UFW-rules-as-code)
+    - [Cloudflare Tunnel configuration automation task](#Cloudflare-Tunnel-configuration-automation-task)
     - [Basic web infrastructure installation automation task](#Basic-web-infrastructure-installation-automation-task)
     - [Docker installation automation task](#Docker-installation-automation-task)
 - [CI and dependency monitoring](#CI-and-dependency-monitoring)
@@ -86,7 +87,7 @@ The Grafana Cloud API key is read from the *GCLOUD_RW_API_KEY* environment varia
 
 Logs shipped by Alloy:
 
-* the systemd journal of the units listed in *alloy_journal_units* in *[config.yml](conf/config.yml)* (keycloak, windfire-security, windfire-calendar, windfire-restaurants-backend, windfire-ui-react, ssh and unattended-upgrades by default); to ship another unit, add its name (e.g. *myapp.service*) to the list and run the playbook again
+* the systemd journal of the units listed in *alloy_journal_units* in *[config.yml](conf/config.yml)* (keycloak, windfire-security, windfire-calendar, windfire-restaurants-backend, windfire-ui-react, ssh, unattended-upgrades and cloudflared by default); to ship another unit, add its name (e.g. *myapp.service*) to the list and run the playbook again
 * kernel lines that contain "[UFW BLOCK]" (connections blocked by UFW); other kernel lines are dropped
 * nothing from /var/log: the journal already holds those messages
 
@@ -102,7 +103,7 @@ The UFW rules rely on the DHCP reservations of these IPs on the home router (var
 | *raspberry02_ip* | raspberry02 | 192.168.1.2 |
 | *pi_core_ip* | pi-core | 192.168.1.10 |
 
-*admin_ip*, *raspberry02_ip* and *pi_core_ip* are used by the per-host rules in *ufw_rules* (see [UFW rules as code](#UFW-rules-as-code)); *raspberry01_ip* is not used by a rule yet, it is recorded for rules that will be set in the future.
+All four are used by the per-host rules in *ufw_rules* (see [UFW rules as code](#UFW-rules-as-code)); *raspberry01_ip* lets the Cloudflare Tunnel on raspberry01 reach windfire-restaurants-backend on raspberry02 (8081).
 
 If a reservation is lost or changed (e.g. the laptop gets a different IP), SSH from the laptop is blocked: restore the reservation, or update the variables and run the playbooks again (*[install.sh](install.sh)*, then *[configure-windfire-infra.sh](configure-windfire-infra.sh)*).
 
@@ -219,6 +220,73 @@ Always pass `--tags windfire_ca` for a CA change: without it the playbook also c
     ./configure-windfire-infra.sh --tags windfire_ca -e windfire_ca_remove_legacy=true
 
 The playbook first checks that no systemd unit and no deployed `.env` file on the box still points at a CA certificate outside `/etc/windfire/ca`, and stops without deleting anything otherwise.
+
+### Cloudflare Tunnel configuration automation task
+raspberry01 runs a **dashboard-managed** Cloudflare Tunnel (*cloudflared*): its public hostnames (routes) and DNS records are configured in the Cloudflare dashboard (Zero Trust > Networks > Tunnels), so there is no */etc/cloudflared/config.yml*, no ingress rule in this repository and no *cert.pem* anywhere. The tunnel reaches windfire-restaurants-backend on raspberry02 on 8081 (UFW rule from *raspberry01_ip* in *ufw_rules*).
+
+It has its own playbook, **[cloudflare-tunnel.yaml](cloudflare-tunnel.yaml)**, and script, **[configure-cloudflare-tunnel.sh](configure-cloudflare-tunnel.sh)** (extra arguments are passed to *ansible-playbook*), so a run of *[configure-windfire-infra.sh](configure-windfire-infra.sh)* never needs or touches the tunnel token. The playbook, on raspberry01 only:
+
+    * stops if /etc/cloudflared/config.yml or a cert.pem (/etc/cloudflared, /usr/local/etc/cloudflared, /root/.cloudflared, /home/pi/.cloudflared) exists
+    * adds Cloudflare's apt repository (signed-by /etc/apt/keyrings/cloudflare-public-v2.gpg) and installs cloudflared
+    * allows the cloudflared origin in unattended-upgrades (and checks it is allowed)
+    * creates the cloudflared system user: no shell, no home, no other group, no sudo (checked)
+    * stores the tunnel token as a systemd-creds encrypted credential (see below)
+    * installs its own sandboxed /etc/systemd/system/cloudflared.service and removes the cloudflared-update units
+    * enables and (re)starts the service only with -e cloudflared_start=true
+
+**Order on a new box.** The UFW rule and the Alloy journal unit are in *[config.yml](conf/config.yml)* and are applied by the other playbooks:
+
+    ./configure-windfire-infra.sh --tags ufw     # raspberry02: 8081 from raspberry01
+    ./install.sh                                 # Alloy ships the cloudflared.service journal
+    # then store the token and start the tunnel as shown below
+
+**Version.** Cloudflare's apt repository keeps only the latest build. On a box without cloudflared the playbook installs *cloudflared_version* (in *[config.yml](conf/config.yml)*; bump it when that build is gone from the repository). Afterwards unattended-upgrades keeps cloudflared current (needrestart restarts it) and the playbook never downgrades it: it only checks that it is at least *cloudflared_min_version* (2025.4.0, the first release with `--token-file`) and that `cloudflared tunnel run --help` lists `--token-file`; if not, it stops before touching the credential or the unit. The unit starts cloudflared with `--no-autoupdate`: updates come only from apt.
+
+**The tunnel token is never stored in this repository**, not even sops-encrypted: it lives in your password manager. *cloudflare/\*token\** is in *[.gitignore](.gitignore)* as a safety net. *[configure-cloudflare-tunnel.sh](configure-cloudflare-tunnel.sh)* asks for it at the terminal (not echoed), keeps it in a non-exported variable of its own process and hands it only to `ansible-playbook`, in the *WINDFIRE_TUNNEL_TOKEN* environment variable (never on a command line); it is gone when the script ends. The playbook reads it only from that variable (no file) and pipes it on stdin to `systemd-creds encrypt --name=tunnel-token - /etc/credstore.encrypted/cloudflared-tunnel-token` on the Pi (root:root 0600). Every task that touches it has `no_log: true` and the play uses Ansible pipelining, so the token never appears in a command line, a temp file, the Ansible log or `-v` output; the playbook refuses to run with *ANSIBLE_KEEP_REMOTE_FILES* or *ANSIBLE_DEBUG* set. The plaintext token never touches the Pi's disk: systemd decrypts the credential into the unit's private credentials directory at start (`LoadCredentialEncrypted=`), and cloudflared reads it with `--token-file ${CREDENTIALS_DIRECTORY}/tunnel-token`.
+
+* token pasted: the credential is created or replaced (rotation)
+* Enter (no token) and the credential exists: it is left untouched
+* Enter (no token) and no credential yet: the playbook stops and tells you to run the script again and paste the token
+
+Every run asks for the token; paste it from the password manager to store or rotate it, press Enter otherwise. Nothing is left in your shell and nothing reaches its history, so there is no `unset` to remember:
+
+    ./configure-cloudflare-tunnel.sh --check --diff               # dry run
+    ./configure-cloudflare-tunnel.sh                              # install / update, the service is not started
+    ./configure-cloudflare-tunnel.sh -e cloudflared_start=true    # enable and (re)start, then wait for /ready
+
+When stdin is not a terminal the script does not prompt; for such runs it still accepts the token from a *WINDFIRE_TUNNEL_TOKEN* variable already in its environment.
+
+**The service is never enabled, started or restarted without `-e cloudflared_start=true`.** With it, the service is restarted if the unit or the credential changed (started otherwise), and the playbook waits until `http://127.0.0.1:20241/ready` answers 200. The metrics and */ready* endpoint listen on 127.0.0.1:*cloudflared_metrics_port* (20241) only, so no UFW rule is needed.
+
+The unit is not the one `cloudflared service install` writes (that one puts the token on the command line in a world-readable file): never run `cloudflared service install` on the box. If an old unit with a token on its command line is found, the playbook replaces it (without showing it in `--diff`) and warns you to rotate the token. The unit runs as *cloudflared* with the same sandbox as the Windfire app units (`ProtectSystem=strict`, `ProtectHome=yes`, no capabilities, ...) and logs to the journal, shipped to Grafana Cloud by Alloy (*cloudflared.service* is in *alloy_journal_units*).
+
+Check it on the Pi with `systemctl status cloudflared`, `journalctl -u cloudflared` and `curl -s 127.0.0.1:20241/ready`.
+
+### Switch between public and LAN-only access
+**[switch-windfire-exposure.sh](switch-windfire-exposure.sh)** moves Windfire between public access through the Cloudflare Tunnel (`https://app.windfire.cc`, Keycloak issuer `https://auth.windfire.cc`) and LAN-only access from the home network (`https://raspberry01:8445`, issuer `https://raspberry01:8443`), and reports which mode it is in. It never changes anything on Cloudflare's side (tunnel, routes, DNS records, Access applications stay), and the Keycloak UI client keeps its `https://app.windfire.cc` entries, so neither direction needs dashboard or console work.
+
+    ./switch-windfire-exposure.sh status                  # read-only: LAN, PUBLIC or MIXED (exit 1 on MIXED)
+    ./switch-windfire-exposure.sh lan                     # rollback to on-prem only
+    ./switch-windfire-exposure.sh lan --forget-token      # also shred the encrypted tunnel token on raspberry01
+    ./switch-windfire-exposure.sh public                  # back to public access
+
+It runs these steps, each idempotent, so an interrupted switch is finished by running the same command again:
+
+| Step | lan | public |
+|---|---|---|
+| 1. [windfire-exposure.yaml](windfire-exposure.yaml) `prepare` | stop and disable cloudflared first; record the mode; set `KEYCLOAK_ISSUER_URL` of windfire-security and windfire-restaurants-backend, restart them, wait until healthy | record the mode; set the issuers, restart, wait until healthy |
+| 2. windfire-security `keycloak/deployment/deploy-keycloak-tls.sh -e keycloak_public_url=...` | `https://raspberry01:8443` (removes the proxy options) | `https://auth.windfire.cc` (may ask for the master admin credentials and an OTP code) |
+| 3. windfire-ui-react `deployment/deploy.sh 1 --profile ...` | `lan` | `public` |
+| 4. `windfire-exposure.yaml` `tunnel` | (nothing) | enable and start cloudflared last, wait for `/ready` |
+| 5. `windfire-exposure.yaml` `status` | must print LAN | must print PUBLIC |
+
+Every step asks for the pi sudo password. The UI step asks its usual questions: press Enter to keep the profile's defaults. Nobody can sign in while the switch runs, and everyone signs in again afterwards, because existing tokens carry the other issuer.
+
+**The mode is recorded on both Pis** as an Ansible local fact, `/etc/ansible/facts.d/windfire.fact` (`{"exposure": "lan"}`, root:root 0644; no file means public). The deploy playbooks of windfire-security (auth server and Keycloak), windfire-restaurants-backend and windfire-ui-react read it as `ansible_local.windfire.exposure`, so a regular deploy made while Windfire is LAN-only keeps the LAN issuer instead of putting the public one back. The script warns when a sibling repository does not read it yet.
+
+**The tunnel token** stays in its encrypted credential when you switch to lan (root only, decrypted only into the unit's private credentials directory), so going public again needs no token. With `--forget-token` it is shredded; then run `./configure-cloudflare-tunnel.sh -e cloudflared_start=true` with the token from the password manager before `./switch-windfire-exposure.sh public`. If raspberry01 may have been compromised while it was LAN-only, refresh the token in the dashboard first (Networking > Tunnels > windfire). `status` and the `tunnel` step warn if the cloudflared unit still holds the token on its command line (a unit written by `cloudflared service install`): run `./configure-cloudflare-tunnel.sh` once to move it into the credential, then rotate it.
+
+The sibling repositories are expected next to this one (`../windfire-security`, `../windfire-ui-react`); set *WINDFIRE_SECURITY_DIR* / *WINDFIRE_UI_DIR* otherwise. The URLs, files, services and health checks the switch uses are the `windfire_*` settings at the end of *[config.yml](conf/config.yml)*.
 
 ### Basic web infrastructure installation automation task
 A very basic infrastructure to run web applications can be made of two major components:
