@@ -330,6 +330,15 @@ An empty alert list does not mean everything is safe:
 * Dependabot does not monitor what the playbooks install on the Raspberry Pi boxes (apt packages, the *geerlingguy.docker_arm* Ansible role)
 <!-- windfire-maps retired (F20): pm2 was listed here, it was installed only for windfire-maps -->
 
+## Recurring checks reminders
+*[windfire-reminders.yml](.github/workflows/windfire-reminders.yml)* opens a GitHub issue, assigned to the repository owner, for the recurring checks of a public Windfire, and GitHub emails it:
+
+* **weekly** (Monday, 07:00 UTC): Cloudflare Access denials, blocked requests in Security > Analytics > Events, tunnel health, Grafana alert rules
+* **monthly** (the 1st, 07:00 UTC): cloudflared and apt updates on both Pis, the Keycloak version, Dependabot pull requests and alerts in the six repositories, fetching the Keycloak backups
+* **yearly** (23 November, 07:00 UTC): rotating the Cloudflare tunnel token
+
+Each issue is a checklist: tick the boxes, then close it. If the previous issue of the same kind is still open, the run comments on it instead of opening another one. To run one by hand: **Actions** > **Windfire reminders** > **Run workflow**, then pick the kind. GitHub turns off scheduled workflows in a public repository after 60 days without commits, and emails a warning first: turn it back on from the **Actions** tab.
+
 ## Projects
 I use Raspberry in some projects I develop for fun.
 

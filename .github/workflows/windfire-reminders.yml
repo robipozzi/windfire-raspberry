@@ -1,0 +1,106 @@
+name: Windfire reminders
+
+# Opens a GitHub issue, assigned to the repository owner, for the recurring Windfire checks (Phase 9 of the security
+# assessment's "Expose with Cloudflare"). GitHub emails the assignee, so the issue is the reminder: tick its boxes,
+# then close it. If the previous reminder of the same kind is still open, the run comments on it instead of opening
+# another one, and the comment is emailed too.
+#
+# Schedules are in UTC: 07:00 UTC is 08:00 in Rome in winter and 09:00 in summer.
+# Run one by hand: Actions > Windfire reminders > Run workflow, then pick weekly, monthly or yearly.
+# GitHub turns scheduled workflows off after 60 days without commits in a public repository, and emails a warning
+# first: re-enable it from the Actions tab (or push any commit).
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'     # weekly: every Monday
+    - cron: '0 7 1 * *'     # monthly: the 1st of every month
+    - cron: '0 7 23 11 *'   # yearly: 23 November, a year after the tunnel was created
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: Reminder to open
+        type: choice
+        options: [weekly, monthly, yearly]
+        default: weekly
+
+permissions:
+  issues: write
+
+concurrency:
+  group: windfire-reminders-${{ github.event.schedule || inputs.kind }}
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Open or update the reminder issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          ASSIGNEE: ${{ github.repository_owner }}
+          SCHEDULE: ${{ github.event.schedule }}
+          INPUT_KIND: ${{ inputs.kind }}
+        run: |
+          set -euo pipefail
+          case "${SCHEDULE:-}" in
+            '0 7 * * 1')   kind=weekly ;;
+            '0 7 1 * *')   kind=monthly ;;
+            '0 7 23 11 *') kind=yearly ;;
+            '')            kind=$INPUT_KIND ;;
+            *)             echo "Unknown schedule: $SCHEDULE" >&2; exit 1 ;;
+          esac
+          today=$(date -u +%Y-%m-%d)
+
+          case $kind in
+            weekly)
+              title="Windfire weekly check ($today)"
+              body=$(cat <<'EOF'
+          About 10 minutes. Tick each box, then close this issue.
+
+          - [ ] **Access denials.** one.dash.cloudflare.com > **Insights** > **Logs** > **Access authentication logs**. Last 7 days, filter **Allow** = `false`. Every denied login should be you (a wrong email or an expired code). An address or country you don't recognise: check the Access policy still lists only your emails.
+          - [ ] **Blocked requests.** dash.cloudflare.com > your domain > **Security** > **Analytics** > **Events** tab. Last 7 days. Expect blocks from the "Keycloak: public paths only" and "Methods" rules and the "Keycloak login" rate limit. A spike from one IP or a path you don't know: look at it, and add a block rule if needed.
+          - [ ] **Tunnel.** dash.cloudflare.com > **Networking** > **Tunnels**: `windfire` is Healthy (or Inactive while Windfire is on-prem only), it is the only tunnel, and it has one connector.
+          - [ ] **Grafana.** Grafana Cloud > **Alerting** > **Alert rules**, folder Windfire: nothing is Firing or in Error. Anything that fired this week has a reason you know.
+          EOF
+              )
+              ;;
+            monthly)
+              title="Windfire monthly patch check ($today)"
+              body=$(cat <<'EOF'
+          About 20 minutes. Tick each box, then close this issue.
+
+          - [ ] **cloudflared.** `ssh -t -i ~/.ssh/ansible_rsa pi@raspberry01 'cloudflared --version; apt-cache policy cloudflared | head -3'`: Installed equals Candidate. If not, unattended-upgrades is stuck: `sudo unattended-upgrade -d` on the Pi shows why.
+          - [ ] **Both Pis.** `ssh -t -i ~/.ssh/ansible_rsa pi@raspberry01 'apt list --upgradable 2>/dev/null; ls /var/run/reboot-required 2>/dev/null'`, and the same for raspberry02. Reboot if `reboot-required` exists (after a reboot, `./switch-windfire-exposure.sh status` must print the mode you expect).
+          - [ ] **Keycloak.** Compare `keycloak_version` in windfire-security's `keycloak/deployment/raspberry/conf/raspberry-config.yml` with the latest 26.x on https://www.keycloak.org/downloads. A security release: back up, then run `upgrade-keycloak.sh`.
+          - [ ] **Dependabot.** github.com/robipozzi: open Dependabot pull requests and security alerts on windfire-security, windfire-security-client, windfire-calendar, windfire-ui-react, windfire-restaurants-backend and windfire-raspberry. Merge or close each.
+          - [ ] **Keycloak backups.** `cd ~/dev/windfire-security/keycloak/deployment && ./fetch-keycloak-backups.sh`, so a copy of the weekly backups leaves the Pi.
+          EOF
+              )
+              ;;
+            yearly)
+              title="Windfire yearly tunnel token rotation ($today)"
+              body=$(cat <<'EOF'
+          About 30 minutes. Steps are in Phase 9 of "Expose with Cloudflare" in the Windfire security assessment. Tick each box, then close this issue.
+
+          - [ ] dash.cloudflare.com > **Networking** > **Tunnels** > `windfire`: refresh the token if the page offers it. If not, delete the tunnel and create it again as in Phase 5, with its three routes in the same order and the same TLS settings.
+          - [ ] Replace the token in the password manager.
+          - [ ] `cd ~/dev/windfire-raspberry && ./configure-cloudflare-tunnel.sh -e cloudflared_start=true`, and paste the new token at the prompt.
+          - [ ] `./switch-windfire-exposure.sh status` prints `PUBLIC`, and the dashboard shows the tunnel Healthy with one connector.
+          - [ ] From a phone on mobile data, sign in at https://app.windfire.cc.
+          - [ ] Check that the domain is still on auto-renew at the registrar.
+          EOF
+              )
+              ;;
+          esac
+
+          label="reminder-$kind"
+          gh label create "$label" --color FBCA04 --description "Windfire $kind reminder" 2>/dev/null || true
+
+          open=$(gh issue list --label "$label" --state open --json number --jq '.[0].number // empty')
+          if [[ -n "$open" ]]; then
+            gh issue comment "$open" --body "@$ASSIGNEE this $kind check is still open ($today). Tick the boxes above, then close the issue."
+            echo "Commented on #$open"
+          else
+            gh issue create --title "$title" --body "$body" --label "$label" --assignee "$ASSIGNEE"
+          fi
