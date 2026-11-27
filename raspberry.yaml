@@ -93,7 +93,7 @@
             enable_collectors = ["systemd"]
 
             systemd {
-              unit_include = "(keycloak|alloy|windfire-.*)\\.service"
+              unit_include = "(keycloak|alloy|cloudflared|windfire-.*)\\.service"
             }
           }
 

@@ -42,7 +42,7 @@ The **[raspberry.yaml](raspberry.yaml)** playbook is provided to do the followin
     * update package manager repo cache and upgrade installed packages on all Raspberry Pi boxes
     * install OpenSSL on all Raspberry Pi boxes
     * install and configure Grafana Cloud Alloy, which ships to Grafana Cloud (see [Grafana Cloud configuration](#Grafana-Cloud-configuration)):
-        * node metrics; the systemd collector reports only the keycloak, alloy and windfire-* units
+        * node metrics; the systemd collector reports only the keycloak, alloy, cloudflared and windfire-* units
         * only the systemd journal of the units listed in *alloy_journal_units* and the kernel "[UFW BLOCK]" lines; /var/log is not read
         * lines that look like they hold a secret (password, passwd, secret, token, authorization, api_key / api-key / apikey, client_secret, any case) are dropped before they leave the Pi
     * install UFW and allow SSH (22/tcp) from the admin laptop (*admin_ip*); on a new Pi (UFW not active) also set default deny incoming / allow outgoing and enable UFW, so only SSH from the laptop gets in; on a Pi where UFW is already active the other rules and the defaults are not changed
@@ -329,6 +329,15 @@ An empty alert list does not mean everything is safe:
 * GitHub does not raise alerts for actions pinned to a commit SHA, which is how *[ci.yml](.github/workflows/ci.yml)* pins them, so review the weekly update pull requests instead
 * Dependabot does not monitor what the playbooks install on the Raspberry Pi boxes (apt packages, the *geerlingguy.docker_arm* Ansible role)
 <!-- windfire-maps retired (F20): pm2 was listed here, it was installed only for windfire-maps -->
+
+## Recurring checks reminders
+*[windfire-reminders.yml](.github/workflows/windfire-reminders.yml)* opens a GitHub issue, assigned to the repository owner, for the recurring checks of a public Windfire, and GitHub emails it:
+
+* **weekly** (Monday, 07:00 UTC): Cloudflare Access denials, blocked requests in Security > Analytics > Events, tunnel health, Grafana alert rules
+* **monthly** (the 1st, 07:00 UTC): cloudflared and apt updates on both Pis, the Keycloak version, Dependabot pull requests and alerts in the six repositories, fetching the Keycloak backups
+* **yearly** (23 November, 07:00 UTC): rotating the Cloudflare tunnel token
+
+Each issue is a checklist: tick the boxes, then close it. If the previous issue of the same kind is still open, the run comments on it instead of opening another one. To run one by hand: **Actions** > **Windfire reminders** > **Run workflow**, then pick the kind. GitHub turns off scheduled workflows in a public repository after 60 days without commits, and emails a warning first: turn it back on from the **Actions** tab.
 
 ## Projects
 I use Raspberry in some projects I develop for fun.
