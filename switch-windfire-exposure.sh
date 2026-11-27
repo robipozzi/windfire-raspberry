@@ -7,6 +7,9 @@
 #   ./switch-windfire-exposure.sh lan [-y] [--forget-token]
 #   ./switch-windfire-exposure.sh public [-y]
 #
+# Every run that reaches the status check ends with one line stating the mode the check found:
+# "Windfire is running on LAN", "Windfire is running on PUBLIC", or MIXED / UNKNOWN in red / yellow.
+#
 # lan:    1. windfire-exposure.yaml prepare: stop and disable cloudflared (internet access ends here), record the mode
 #            on both Pis, set KEYCLOAK_ISSUER_URL of windfire-security and windfire-restaurants-backend, restart them
 #         2. windfire-security keycloak/deployment/deploy-keycloak-tls.sh with keycloak_public_url = internal URL
@@ -50,6 +53,22 @@ runPlaybook()
   runWithAnsibleSshKey ansible-playbook "$ANSIBLE_PLAYBOOK" "$@"
 }
 
+# Last lines of every run that reached the status step: the mode the playbook found (written to RESULT_FILE)
+printExposure()
+{
+  local verdict
+  verdict=$(tr -d '[:space:]' 2>/dev/null < "$RESULT_FILE")
+  echo "${cyn}==========================================================${end}"
+  case $verdict in
+    LAN)    echo "${grn}  Windfire is running on LAN (home network only)${end}" ;;
+    PUBLIC) echo "${grn}  Windfire is running on PUBLIC (internet, through Cloudflare)${end}" ;;
+    MIXED)  echo "${red}  Windfire is MIXED: the components disagree, see the rows above${end}" ;;
+    "")     echo "${yel}  Windfire mode UNKNOWN: the status check did not complete${end}" ;;
+    *)      echo "${yel}  Windfire mode ${verdict}: see the rows above${end}" ;;
+  esac
+  echo "${cyn}==========================================================${end}"
+}
+
 stepFailed()
 {
   echo "${red}Step '$1' failed: Windfire is half switched. Fix the cause above and run $0 $TARGET again${end}" >&2
@@ -82,9 +101,14 @@ echo "${cyn}==========================================================${end}"
 echo "${cyn}  Windfire exposure: ${TARGET} ${end}"
 echo "${cyn}==========================================================${end}"
 
+RESULT_FILE=$(mktemp) || exit 1
+trap 'rm -f "$RESULT_FILE"' EXIT
+
 if [[ "$TARGET" == status ]]; then
-  runPlaybook -e windfire_exposure_step=status
-  exit $?
+  runPlaybook -e windfire_exposure_step=status -e "windfire_exposure_result_file=$RESULT_FILE"
+  rc=$?
+  printExposure
+  exit $rc
 fi
 
 # ===== PRE-FLIGHT =====
@@ -149,11 +173,15 @@ if [[ "$TARGET" == public ]]; then
 fi
 
 echo "${grn}[$([[ "$TARGET" == public ]] && echo 5 || echo 4)] Check ($ANSIBLE_PLAYBOOK, step status)${end}"
-runPlaybook -e "windfire_exposure=$TARGET" -e windfire_exposure_step=status || stepFailed status
+if ! runPlaybook -e "windfire_exposure=$TARGET" -e windfire_exposure_step=status \
+       -e "windfire_exposure_result_file=$RESULT_FILE"; then
+  printExposure
+  stepFailed status
+fi
 
-echo "${grn}Windfire is ${TARGET} ${coffee}${end}"
 if [[ "$TARGET" == lan ]]; then
   echo "Sign in at https://raspberry01:8445 from the home network. A phone on mobile data must not reach Windfire."
 else
   echo "Sign in at https://app.windfire.cc, and check from a phone on mobile data."
 fi
+printExposure

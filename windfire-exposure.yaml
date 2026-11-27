@@ -14,7 +14,9 @@
 #               (raspberry02), restart them and wait until they are healthy
 # tunnel   public only: enable and start cloudflared, then wait until it is connected (nothing to do for lan)
 # status   read-only: report every component's mode and print LAN, PUBLIC or MIXED. It fails on MIXED, and also
-#          when -e windfire_exposure=... is given and the result is not that mode
+#          when -e windfire_exposure=... is given and the result is not that mode. With
+#          -e windfire_exposure_result_file=<path> it also writes LAN, PUBLIC or MIXED to that file on the control
+#          machine, so the calling script can print the final verdict
 #
 # Nothing on Cloudflare's side is changed: the tunnel, its routes, the DNS records and the Access applications stay,
 # so going public again needs no dashboard work. The Keycloak UI client keeps its https://app.<domain> entries.
@@ -389,6 +391,16 @@
             exposure_verdict: >-
               {{ (exposure_rows | map(attribute='mode') | unique | first | upper)
                  if (exposure_rows | map(attribute='mode') | unique | list | length) == 1 else 'MIXED' }}
+
+        # Before the reports and the fail task, so the script gets the verdict on MIXED too
+        - name: Hand the overall mode back to the calling script
+          ansible.builtin.copy:
+            content: "{{ exposure_verdict | trim }}\n"
+            dest: "{{ windfire_exposure_result_file }}"
+            mode: "0600"
+          delegate_to: localhost
+          become: false
+          when: windfire_exposure_result_file is defined
 
         - name: Report the exposure mode
           ansible.builtin.debug:
